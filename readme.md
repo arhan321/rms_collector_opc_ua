@@ -23,6 +23,21 @@ dotnet run --project RmsCollector.csproj -- --mock
 dotnet run --project tests-opcua\RmsCollector.OpcUa.Tests.csproj
 ```
 
+### jika mau running production
+Cek SDK .NET 10:
+```
+dotnet --list-sdks
+```
+Build aplikasinya:
+```
+dotnet build .\RmsCollector.csproj -c Release
+```
+Jalankan pembacaan robot aktual:
+```
+.\bin\Release\net10.0\rms_collector_opcua.exe --config .\config\collector.opcua.conf --real
+```
+
+
 Proyek executable hanya `RmsCollector.csproj`. Kode startup berada di `src-csharp/Program.cs`; komponen server di `opcua/`. Binary bernama `rms_collector_opcua.exe`.
 
 Konfigurasi hanya melalui `.conf`, tanpa pengaturan environment. Pembacaan aktual membutuhkan Windows x64 dan SDK YMConnect berpasangan yang sudah disertakan pada `sdk/dotnet`.
@@ -36,3 +51,4 @@ Keamanan koneksi: Basic256Sha256, SignAndEncrypt, explicit certificate trust. Se
 Ignition bertanggung jawab menyimpan data ke database. Database belum otomatis dikonfigurasi oleh source Collector ini. Tidak ada historical-read atau antrean persisten sampel pada Collector; uji pengaturan history/retensi di Ignition sebelum menggunakan data untuk laporan.
 
 Pembaca saat ini mendukung 1–8 controller, group R1. Torque berunit `sdk_raw`; tidak menambahkan diagnosis OEM, konversi ampere aktual atau position error.
+
