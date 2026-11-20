@@ -1,7 +1,7 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-rms_collector.exe --config config\collector.dojo.conf --mock --once --dry-run
+rms_collector_opcua.exe --config config\collector.opcua.conf --mock
 set "RMS_RESULT=%ERRORLEVEL%"
 pause
 exit /b %RMS_RESULT%

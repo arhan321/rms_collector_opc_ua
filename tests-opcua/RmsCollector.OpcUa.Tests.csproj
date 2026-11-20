@@ -9,7 +9,7 @@
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="../opcua/RmsCollector.OpcUa.csproj" />
+    <ProjectReference Include="../RmsCollector.csproj" />
     <PackageReference Include="OPCFoundation.NetStandard.Opc.Ua.Client" Version="1.5.378.196" />
   </ItemGroup>
 </Project>

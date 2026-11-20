@@ -14,9 +14,9 @@ internal sealed class YmConnectReader(Device device, bool jobEverySample = false
     public static void CheckSdk()
     {
         if (!OperatingSystem.IsWindows() || RuntimeInformation.ProcessArchitecture != Architecture.X64)
-            throw new PlatformNotSupportedException("REAL requires Windows x64. Mock/probe can run on other platforms.");
+            throw new PlatformNotSupportedException("REAL requires Windows x64. Mock can run on other platforms.");
         string native = Path.Combine(AppContext.BaseDirectory, "YMConnect.dll");
-        if (!File.Exists(native)) throw new FileNotFoundException("YMConnect.dll is missing beside rms_collector.exe", native);
+        if (!File.Exists(native)) throw new FileNotFoundException("YMConnect.dll is missing beside rms_collector_opcua.exe", native);
         try
         {
             nint handle = NativeLibrary.Load(native);
@@ -81,11 +81,11 @@ internal sealed class YmConnectReader(Device device, bool jobEverySample = false
         s.State = Result(stateStatus, "YMConnect state read failed");
         if (s.State.Ok)
         {
-            s.StateData = ApiPayloads.Map(("known", true), ("running", state.IsRunning), ("servo_on", state.IsServoOn),
+            s.StateData = SampleJson.Map(("known", true), ("running", state.IsRunning), ("servo_on", state.IsServoOn),
                 ("alarm", state.IsAlarming), ("hold", state.IsInHold), ("error", state.IsErroring),
                 ("control_mode", Enum.IsDefined(state.ControlMode) ? state.ControlMode.ToString() : "Unknown"),
                 ("cycle_mode", Enum.IsDefined(state.CycleMode) ? state.CycleMode.ToString() : "Unknown"));
-            s.State = s.State with { Raw = ApiPayloads.Json(s.StateData) };
+            s.State = s.State with { Raw = SampleJson.Json(s.StateData) };
         }
         if (operating) ReadOperating(c, s);
         if (alarms) ReadAlarms(c, s);
@@ -98,10 +98,10 @@ internal sealed class YmConnectReader(Device device, bool jobEverySample = false
         try
         {
             var status = c.Job.GetExecutingJobInformation(InformTaskNumber.Master, out JobData job);
-            s.Job = Result(status, "YMConnect job read failed", status.StatusCode == 0 ? ApiPayloads.Text(job.Name) : "");
+            s.Job = Result(status, "YMConnect job read failed", status.StatusCode == 0 ? SampleJson.Text(job.Name) : "");
             if (s.Job.Ok)
             {
-                s.JobData = ApiPayloads.Map(("name", ApiPayloads.Text(job.Name)),
+                s.JobData = SampleJson.Map(("name", SampleJson.Text(job.Name)),
                     ("line", job.Line), ("step", job.StepNumber),
                     ("speed_override_percent", job.SpeedOverride), ("task", "Master"));
             }
@@ -111,7 +111,7 @@ internal sealed class YmConnectReader(Device device, bool jobEverySample = false
             s.Job = new(false, -1, $"YMConnect job read failed ({exception.GetType().Name})");
             s.JobData = null;
         }
-        finally { s.JobReadAt = ApiPayloads.Timestamp(); }
+        finally { s.JobReadAt = SampleJson.Timestamp(); }
     }
 
     private static void ReadOperating(MotomanController c, RobotSample s)
@@ -135,9 +135,9 @@ internal sealed class YmConnectReader(Device device, bool jobEverySample = false
         }
     }
 
-    private static object AlarmObject(AlarmData alarm) => ApiPayloads.Map(
+    private static object AlarmObject(AlarmData alarm) => SampleJson.Map(
         ("alarm_code", alarm.Code.ToString(CultureInfo.InvariantCulture)), ("subcode", alarm.Subcode.ToString(CultureInfo.InvariantCulture)),
-        ("alarm_name", ApiPayloads.Text(alarm.Name)), ("controller_time_raw", ApiPayloads.Text(alarm.Time)));
+        ("alarm_name", SampleJson.Text(alarm.Name)), ("controller_time_raw", SampleJson.Text(alarm.Time)));
 
     private static void ReadAlarms(MotomanController c, RobotSample s)
     {
@@ -153,7 +153,7 @@ internal sealed class YmConnectReader(Device device, bool jobEverySample = false
                 s.ActiveAlarms = (active.Alarms ?? []).Take(active.Count).Select(AlarmObject).ToArray();
                 string text = active.Count == 0 ? "No active alarms." : $"{active.Count} alarm{(active.Count == 1 ? "" : "s")} active.";
                 foreach (var (a, i) in (active.Alarms ?? []).Take(active.Count).Select((a, i) => (a, i)))
-                    text += $"\nAlarm {i + 1}: Code: {a.Code}\nSubcode: {a.Subcode}\nName: {ApiPayloads.Text(a.Name)}\nTime: {ApiPayloads.Text(a.Time)}";
+                    text += $"\nAlarm {i + 1}: Code: {a.Code}\nSubcode: {a.Subcode}\nName: {SampleJson.Text(a.Name)}\nTime: {SampleJson.Text(a.Time)}";
                 s.Alarm = s.Alarm with { Raw = text };
             }
         }
@@ -166,13 +166,13 @@ internal sealed class YmConnectReader(Device device, bool jobEverySample = false
             int count = ok ? Math.Min(Math.Max(history.NumberOfAlarmsFetched, 0), history.Alarms?.Length ?? 0) : 0;
             allOk &= ok;
             anyOk |= ok;
-            categories.Add(ApiPayloads.Map(("category", category.ToString()), ("read_ok", ok), ("status_code", result.StatusCode),
+            categories.Add(SampleJson.Map(("category", category.ToString()), ("read_ok", ok), ("status_code", result.StatusCode),
                 ("requested_count", 20), ("fetched_count", ok ? count : null),
                 ("alarms", ok ? (history.Alarms ?? []).Take(count).Select(AlarmObject).ToArray() : Array.Empty<object>())));
         }
-        s.AlarmHistoryData = ApiPayloads.Map(("requested_per_category", 20), ("categories", categories));
+        s.AlarmHistoryData = SampleJson.Map(("requested_per_category", 20), ("categories", categories));
         s.AlarmHistory = new(allOk, allOk ? 0 : -1, allOk ? "" : anyOk ? "Some alarm history categories failed" : "All alarm history category reads failed",
-            ApiPayloads.Json(s.AlarmHistoryData));
+            SampleJson.Json(s.AlarmHistoryData));
     }
 
     private void ReadExtras(MotomanController c, RobotSample s)
@@ -182,8 +182,8 @@ internal sealed class YmConnectReader(Device device, bool jobEverySample = false
         {
             var status = c.Status.ReadSystemInformation(id, out SystemInfoData data);
             bool ok = status.StatusCode == 0;
-            info[name] = ApiPayloads.Map(("read_ok", ok), ("status_code", status.StatusCode),
-                ("model_name", ok ? ApiPayloads.Text(data.ModelName) : null), ("software_version", ok ? ApiPayloads.Text(data.SoftwareVersion) : null));
+            info[name] = SampleJson.Map(("read_ok", ok), ("status_code", status.StatusCode),
+                ("model_name", ok ? SampleJson.Text(data.ModelName) : null), ("software_version", ok ? SampleJson.Text(data.SoftwareVersion) : null));
         }
         s.SystemInfoData = info;
         if (device.Io.Length == 0) { s.Io = new(false, -1, "No IO addresses configured"); return; }
@@ -194,10 +194,10 @@ internal sealed class YmConnectReader(Device device, bool jobEverySample = false
             var status = c.IO.ReadByte((uint)address, out IOByteData value);
             bool ok = status.StatusCode == 0;
             allOk &= ok;
-            values[address.ToString(CultureInfo.InvariantCulture)] = ApiPayloads.Map(("read_ok", ok), ("status_code", status.StatusCode),
+            values[address.ToString(CultureInfo.InvariantCulture)] = SampleJson.Map(("read_ok", ok), ("status_code", status.StatusCode),
                 ("sdk_raw_text", ok ? Convert.ToString(value.ToByte(), 2).PadLeft(8, '0') : null));
         }
         s.IoData = values;
-        s.Io = new(allOk, allOk ? 0 : -1, allOk ? "" : "Some IO address reads failed", ApiPayloads.Json(values));
+        s.Io = new(allOk, allOk ? 0 : -1, allOk ? "" : "Some IO address reads failed", SampleJson.Json(values));
     }
 }

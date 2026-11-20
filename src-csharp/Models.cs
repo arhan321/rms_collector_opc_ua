@@ -28,13 +28,8 @@ internal sealed class RobotSample
     public object[] ActiveAlarms { get; set; } = [];
 }
 
-internal static class ApiPayloads
+internal static class SampleJson
 {
-    public const string TelemetryEndpoint = "/api/v1/collector/telemetry";
-    public const string OperatingEndpoint = "/api/v1/collector/operating-times";
-    public const string AlarmEndpoint = "/api/v1/collector/alarms/snapshots";
-    public const string ConnectionEndpoint = "/api/v1/collector/connections";
-    public static bool EndpointAllowed(string endpoint) => endpoint is TelemetryEndpoint or OperatingEndpoint or AlarmEndpoint or ConnectionEndpoint;
     public static string Timestamp() => DateTimeOffset.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture);
     public static string Json(object value) => JsonSerializer.Serialize(value);
     public static string Text(string? value) => (value ?? "").Replace("\0", "", StringComparison.Ordinal);
@@ -48,7 +43,7 @@ internal static class ApiPayloads
     }
     public static object Metadata(RobotSample s, bool mock, Device d)
     {
-        // All original metadata keys and values remain unchanged.
+        // Metadata belongs to this OPC UA sample, including independent SDK read results.
         var data = Map(
             ("simulated", mock), ("torque_unit", "sdk_raw"), ("position_unit", "pulses"), ("group", d.Group),
             ("controller_state", s.StateData), ("job", s.JobData), ("system_info", s.SystemInfoData),
@@ -58,27 +53,11 @@ internal static class ApiPayloads
         data["job_monitor"] = JobMonitorEvidence.FromSample(s, mock);
         return data;
     }
-    public static string Telemetry(Device d, string session, long seq, string at, RobotSample s, bool mock) => Json(Map(
+    public static string Snapshot(Device d, string session, long seq, string at, RobotSample s, bool mock) => Json(Map(
         ("robot_id", d.Id), ("collector_session_id", session), ("sequence", seq), ("sampled_at", at),
         ("position_ok", s.Position.Ok), ("position_status_code", s.Position.Code), ("position_status_message", s.Position.Error),
         ("position_sampled_at", s.Position.Ok ? at : null), ("position_pulses", s.Position.Ok ? Axes(s.Pulses) : null),
         ("torque_ok", s.Torque.Ok), ("torque_status_code", s.Torque.Code), ("torque_status_message", s.Torque.Error),
         ("torque_sampled_at", s.Torque.Ok ? at : null), ("torque_axes", s.Torque.Ok ? Axes(s.Torques) : null),
         ("torque_unit", "sdk_raw"), ("raw_payload", Metadata(s, mock, d))));
-    public static string Operating(Device d, string at, OperatingReading r, bool mock) => Json(Map(
-        ("robot_id", d.Id), ("time_type", r.Type), ("sampled_at", at), ("read_ok", r.Result.Ok),
-        ("status_code", r.Result.Code), ("status_message", r.Result.Error), ("value_raw", r.Result.Ok ? r.Result.Raw : null),
-        ("value_seconds", r.Result.Ok ? r.Seconds : null),
-        ("raw_payload", Map(("simulated", mock), ("duration_unit", "seconds"),
-            ("duration_source", "YMConnect TimeData.elapsedTime Hours/Minutes/Seconds")))));
-    public static string Alarms(Device d, string at, RobotSample s, bool mock) => Json(Map(
-        ("robot_id", d.Id), ("sampled_at", at), ("read_ok", s.Alarm.Ok), ("status_code", s.Alarm.Code),
-        ("status_message", s.Alarm.Error), ("sdk_text", s.Alarm.Ok ? s.Alarm.Raw : null),
-        ("active_alarm_count", s.Alarm.Ok ? s.ActiveAlarmCount : null), ("parsed_alarms", s.Alarm.Ok ? s.ActiveAlarms : null),
-        ("raw_payload", Map(("simulated", mock), ("active_alarms", s.Alarm.Ok ? s.ActiveAlarms : null),
-            ("alarm_history", s.AlarmHistoryData), ("alarm_history_read", Availability(s.AlarmHistory))))));
-    public static string Connection(Device d, string at, string state, bool mock) => Json(Map(
-        ("robot_id", d.Id), ("state", state), ("occurred_at", at), ("ip_address", d.Ip),
-        ("message", mock ? "MOCK TEST — NOT ACTUAL ROBOT" : "YMConnect collector status"),
-        ("raw_payload", Map(("simulated", mock), ("control_group", d.Group)))));
 }

@@ -13,8 +13,8 @@ The license is copied verbatim from the official YMConnect repository to
 `sdk/dotnet/LICENSE`, and included in publish output as `licenses/YMConnect-LICENSE`.
 https://github.com/Yaskawa-Global/YMConnect/blob/main/LICENSE
 
-The self-contained package also contains the Microsoft .NET runtime and its
-supplied license and third party notices in `licenses/dotnet`. The publish target
-copies these notices from the actual .NET runtime pack. Preserve those files when distributing
-or updating the published folder. The Visual C++ Redistributable installer is
-obtained separately from Microsoft and is not bundled in this repository.
+The Windows package is framework-dependent and requires .NET Runtime 10 x64.
+NuGet dependency licenses are retained in `opcua/licenses` and copied to
+published `licenses`. Preserve these notices when distributing the application.
+The Visual C++ Redistributable installer is obtained separately from Microsoft
+and is not bundled in this repository.

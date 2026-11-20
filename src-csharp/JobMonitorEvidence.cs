@@ -1,15 +1,5 @@
 namespace RmsCollector;
 
-/// <summary>
-/// Optional, read-only YMConnect job evidence. Does NOT claim access to OEM JOB DIAGNOSIS.
-/// Legacy environment fallback when the configuration does not specify job polling cadence.
-/// </summary>
-internal static class JobMonitorOptions
-{
-    public static bool EverySample => string.Equals(
-        Environment.GetEnvironmentVariable("RMS_JOB_MONITOR_EVERY_SAMPLE"), "1", StringComparison.Ordinal);
-}
-
 internal static class JobMonitorEvidence
 {
     public static object FromSample(RobotSample sample, bool simulated)
@@ -24,7 +14,7 @@ internal static class JobMonitorEvidence
         string readStatus = !attempted ? "not_polled"
             : !sample.Job.Ok ? "read_failed" : !validName ? "invalid_job" : "read_ok";
 
-        return ApiPayloads.Map(
+        return SampleJson.Map(
             ("schema_version", 2),
             ("source", simulated ? "mock" : "YMConnect.GetExecutingJobInformation"),
             ("task", "Master"),

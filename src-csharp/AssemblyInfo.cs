@@ -1,2 +1,2 @@
 using System.Runtime.CompilerServices;
-[assembly: InternalsVisibleTo("RmsCollector.Tests")]
+[assembly: InternalsVisibleTo("RmsCollector.OpcUa.Tests")]

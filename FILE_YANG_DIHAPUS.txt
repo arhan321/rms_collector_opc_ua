@@ -1,0 +1,18 @@
+FILE SOURCE/KONFIGURASI LAMA YANG DIPINDAHKAN DARI PROJECT
+
+collector.token.example
+collector_windows_csharp.patch
+config/collector.conf
+config/collector.dojo.conf
+config/sample_config_8_robot
+opcua/OpcUaProgram.cs
+opcua/RmsCollector.OpcUa.csproj
+opcua/packages.lock.json
+src-csharp/Transport.cs
+tests/Program.cs
+tests/RmsCollector.Tests.csproj
+
+Gunakan BERSIHKAN_FILE_LAMA.cmd setelah ekstrak paket perubahan.
+File dipindahkan ke backup di luar project. Tidak dihapus permanen.
+Folder hasil build bin/obj/publish lama juga dipindahkan agar tidak menjalankan binary lama.
+Konfigurasi OPC UA, konfigurasi robot, SDK dan pki-opcua tetap dipertahankan.

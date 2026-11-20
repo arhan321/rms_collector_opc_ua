@@ -9,24 +9,78 @@ internal static class AppLog
     public static void Write(string text) { lock (Sync) Console.WriteLine(text); }
 }
 
-internal static class CollectorRunner
+internal static class OpcUaProgram
 {
-    public static async Task RunRobotAsync(CollectorConfig config, Device device, CliOptions options, string token,
-        CancellationToken cancellation, Func<Device, IRobotReader>? readerFactory = null)
+    public static async Task<int> Main(string[] args)
     {
-        using var reader = readerFactory?.Invoke(device) ?? (options.Mock
-            ? (IRobotReader)new MockReader(device, config.JobEverySample)
-            : new YmConnectReader(device, config.JobEverySample));
-        using var tx = new Dispatcher(config, device, options.DryRun, token);
+        Console.OutputEncoding = new UTF8Encoding(false);
+        try
+        {
+            string path = "config/collector.opcua.conf";
+            bool mock = false, real = false, checkSdk = false;
+            int duration = 0;
+            for (int i = 0; i < args.Length; i++)
+            {
+                string Value() => ++i < args.Length ? args[i] : throw new ArgumentException("Missing option value");
+                switch (args[i])
+                {
+                    case "--config": path = Value(); break;
+                    case "--mock": mock = true; break;
+                    case "--real": real = true; break;
+                    case "--check-sdk": checkSdk = true; break;
+                    case "--duration": duration = CollectorConfig.Integer("duration", Value(), 1, 86400); break;
+                    case "--help":
+                        Console.WriteLine("rms_collector_opcua --config config/collector.opcua.conf --real|--mock [--duration seconds]\nrms_collector_opcua --check-sdk\nRead-only OPC UA server. Run from the project/publish folder.");
+                        return 0;
+                    default: throw new ArgumentException($"Unknown option: {args[i]}");
+                }
+            }
+            if (checkSdk)
+            {
+                if (mock || real || duration != 0) throw new ArgumentException("Use --check-sdk separately from collection options");
+                YmConnectReader.CheckSdk();
+                AppLog.Write("[SDK] Windows x64 YMConnect libraries load successfully. No robot connection was made.");
+                return 0;
+            }
+            if (mock == real) throw new ArgumentException("Choose exactly one of --real or --mock");
+            var settings = OpcUaSettings.Load(path);
+            if (real) YmConnectReader.CheckSdk();
+            using var cancellation = new CancellationTokenSource();
+            if (duration > 0) cancellation.CancelAfter(TimeSpan.FromSeconds(duration));
+            ConsoleCancelEventHandler cancel = (_, e) => { e.Cancel = true; cancellation.Cancel(); };
+            Console.CancelKeyPress += cancel;
+            try
+            {
+                await using var host = await OpcUaHost.StartAsync(settings, mock);
+                AppLog.Write($"[OPCUA] {settings.Endpoint} | namespace={RmsNodeManager.NamespaceUri}");
+                AppLog.Write($"[OPCUA] {(mock ? "SIMULATED DATA: not actual robot" : "YMConnect read-only data")} | security=Basic256Sha256/SignAndEncrypt");
+                AppLog.Write($"[OPCUA] Trust the Ignition client certificate in {settings.PkiDirectory}/trusted/certs");
+                var tasks = settings.Robots.Devices.Select(device => Task.Run(async () =>
+                {
+                    try { await OpcUaRunner.RunAsync(settings.Robots, device, host.Nodes, mock, cancellation.Token); }
+                    catch { cancellation.Cancel(); throw; }
+                })).ToArray();
+                await Task.WhenAll(tasks);
+                return 0;
+            }
+            finally { Console.CancelKeyPress -= cancel; }
+        }
+        catch (OperationCanceledException) { return 0; }
+        catch (Exception e) { Console.Error.WriteLine($"[ERROR] {e.Message}"); return 1; }
+    }
+}
+
+internal static class OpcUaRunner
+{
+    public static async Task RunAsync(CollectorConfig config, Device device, RmsNodeManager nodes, bool mock,
+        CancellationToken cancellation, Func<IRobotReader>? factory = null)
+    {
+        using var reader = factory?.Invoke() ?? (mock ? (IRobotReader)new MockReader(device, config.JobEverySample) : new YmConnectReader(device, config.JobEverySample));
         string session = Guid.NewGuid().ToString();
         long sequence = 0;
-        bool announced = false, failed = false;
-        int badSamples = 0;
-        (bool Ok, int Code)? lastJobResult = null;
-        TimeSpan nextOperating = TimeSpan.Zero, nextAlarm = TimeSpan.Zero, nextExtras = TimeSpan.Zero;
+        int badReads = 0;
         var clock = Stopwatch.StartNew();
-        AppLog.Write($"[RMS] robot_id={device.Id} ip={device.Ip} {(options.Mock ? "MOCK" : "REAL")} started");
-        AppLog.Write($"[JOB {device.Id}] cadence={(config.JobEverySample ? "every telemetry sample" : $"extras/{config.ExtrasSeconds}s")}");
+        TimeSpan nextOperating = TimeSpan.Zero, nextAlarms = TimeSpan.Zero, nextExtras = TimeSpan.Zero;
         try
         {
             while (!cancellation.IsCancellationRequested)
@@ -34,141 +88,29 @@ internal static class CollectorRunner
                 TimeSpan start = clock.Elapsed;
                 if (!reader.Connected && !reader.Connect())
                 {
-                    if (options.Once) throw new IOException($"YMConnect could not connect to robot {device.Id} at {device.Ip}");
-                    if (announced)
+                    nodes.Disconnect(device.Id, "YMConnect connection failed");
+                }
+                else
+                {
+                    bool operating = start >= nextOperating, alarms = start >= nextAlarms, extras = start >= nextExtras;
+                    var sample = reader.Collect(sequence, extras, operating, alarms);
+                    nodes.Publish(device, sample, session, sequence++, DateTime.UtcNow, operating, alarms, extras);
+                    if (sample.Position.Ok || sample.Torque.Ok) badReads = 0;
+                    else if (++badReads >= 3)
                     {
-                        await tx.PostAsync(ApiPayloads.ConnectionEndpoint, ApiPayloads.Connection(device, ApiPayloads.Timestamp(), "offline", options.Mock), cancellation);
-                        announced = false;
+                        nodes.Disconnect(device.Id, "Three consecutive telemetry failures");
+                        reader.Disconnect();
+                        badReads = 0;
                     }
-                    await tx.FlushAsync(cancellation);
-                    await WaitUntilAsync(clock, start + TimeSpan.FromMilliseconds(config.TelemetryMs), cancellation);
-                    continue;
+                    if (operating) nextOperating = start + TimeSpan.FromSeconds(config.OperatingSeconds);
+                    if (alarms) nextAlarms = start + TimeSpan.FromSeconds(config.AlarmSeconds);
+                    if (extras) nextExtras = start + TimeSpan.FromSeconds(config.ExtrasSeconds);
                 }
-                TimeSpan now = clock.Elapsed;
-                bool operating = now >= nextOperating, alarms = now >= nextAlarm, extras = now >= nextExtras;
-                var sample = reader.Collect(sequence, extras, operating, alarms);
-                if (sample.JobReadAt is not null && lastJobResult != (sample.Job.Ok, sample.Job.Code))
-                {
-                    lastJobResult = (sample.Job.Ok, sample.Job.Code);
-                    AppLog.Write($"[JOB {device.Id}] sdk_read_ok={sample.Job.Ok} status_code={sample.Job.Code} {sample.Job.Error}");
-                }
-                bool good = sample.Position.Ok || sample.Torque.Ok;
-                string at = ApiPayloads.Timestamp();
-                if (good)
-                {
-                    badSamples = 0;
-                    if (!announced)
-                    {
-                        await tx.PostAsync(ApiPayloads.ConnectionEndpoint, ApiPayloads.Connection(device, at, "connected", options.Mock), cancellation);
-                        announced = true;
-                    }
-                }
-                else if (++badSamples >= 3)
-                {
-                    if (announced) await tx.PostAsync(ApiPayloads.ConnectionEndpoint, ApiPayloads.Connection(device, at, "offline", options.Mock), cancellation);
-                    announced = false;
-                    reader.Disconnect();
-                    badSamples = 0;
-                    AppLog.Write($"[YMConnect {device.Id}] disconnected after 3 consecutive cycles with no position or torque data");
-                }
-                if (options.Once && !good) throw new IOException($"No position or torque read succeeded for robot {device.Id}");
-                if (good) await tx.PostAsync(ApiPayloads.TelemetryEndpoint, ApiPayloads.Telemetry(device, session, sequence, at, sample, options.Mock), cancellation);
-                if (operating)
-                {
-                    foreach (var counter in sample.OperatingReadings)
-                        await tx.PostAsync(ApiPayloads.OperatingEndpoint, ApiPayloads.Operating(device, ApiPayloads.Timestamp(), counter, options.Mock), cancellation);
-                    nextOperating = now + TimeSpan.FromSeconds(config.OperatingSeconds);
-                }
-                if (alarms)
-                {
-                    await tx.PostAsync(ApiPayloads.AlarmEndpoint, ApiPayloads.Alarms(device, ApiPayloads.Timestamp(), sample, options.Mock), cancellation);
-                    nextAlarm = now + TimeSpan.FromSeconds(config.AlarmSeconds);
-                }
-                if (extras)
-                {
-                    nextExtras = now + TimeSpan.FromSeconds(config.ExtrasSeconds);
-                    if (!sample.State.Ok || !sample.Io.Ok)
-                        AppLog.Write($"[SDK {device.Id}] extras: {sample.State.Error}; {sample.Io.Error}");
-                }
-                await tx.FlushAsync(cancellation);
-                if (options.Once) break;
-                sequence++;
-                await WaitUntilAsync(clock, start + TimeSpan.FromMilliseconds(config.TelemetryMs), cancellation);
+                TimeSpan delay = start + TimeSpan.FromMilliseconds(config.TelemetryMs) - clock.Elapsed;
+                if (delay > TimeSpan.Zero) await Task.Delay(delay, cancellation);
             }
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
-        catch { failed = true; throw; }
-        finally
-        {
-            if (announced && !options.Once && !failed)
-            {
-                // Graceful Ctrl+C should preserve a final stopped record even if the API is offline.
-                try { await tx.PostAsync(ApiPayloads.ConnectionEndpoint, ApiPayloads.Connection(device, ApiPayloads.Timestamp(), "stopped", options.Mock), CancellationToken.None); }
-                catch (Exception e) { AppLog.Write($"[STOP {device.Id}] {e.Message}"); }
-            }
-        }
-    }
-
-    private static Task WaitUntilAsync(Stopwatch clock, TimeSpan target, CancellationToken cancellation)
-    {
-        TimeSpan remaining = target - clock.Elapsed;
-        return remaining > TimeSpan.Zero ? Task.Delay(remaining, cancellation) : Task.CompletedTask;
-    }
-}
-
-internal static class Program
-{
-    public static async Task<int> Main(string[] args)
-    {
-        Console.OutputEncoding = new UTF8Encoding(false);
-        try
-        {
-            var options = CliOptions.Parse(args);
-            if (options.Help)
-            {
-                Console.WriteLine("rms_collector --config config/collector.conf --mock|--real [--once] [--dry-run] [--robot-id N] [--allow-mock-post]\n" +
-                    "rms_collector --probe [--config config/collector.conf]\n" +
-                    "rms_collector --check-sdk\n\n" +
-                    "Mock POST is blocked unless explicitly allowed for a DEMO robot. REAL is read-only and requires Windows x64.\n" +
-                    "Relative config/token/spool paths are resolved from your working directory. Run from the project/publish folder.");
-                return 0;
-            }
-            if (options.CheckSdk)
-            {
-                YmConnectReader.CheckSdk();
-                AppLog.Write("[SDK] Matching Windows x64 managed/native DLLs load successfully. No robot connection was made.");
-                return 0;
-            }
-            var config = CollectorConfig.Load(options.ConfigPath);
-            AppLog.Write($"[CONFIG] path={Path.GetFullPath(options.ConfigPath)} api_base={config.ApiBase}");
-            using var stop = new CancellationTokenSource();
-            ConsoleCancelEventHandler cancel = (_, e) => { e.Cancel = true; stop.Cancel(); };
-            Console.CancelKeyPress += cancel;
-            try
-            {
-                if (options.Probe)
-                {
-                    using var api = new ApiClient(config, "");
-                    var result = await api.SendAsync("/up", null, stop.Token);
-                    AppLog.Write($"[PROBE] GET {config.ApiBase}/up => {result.Summary}");
-                    return result.Error is null && result.Status is >= 200 and < 400 ? 0 : 1;
-                }
-                var devices = config.Devices.Where(d => options.RobotId == 0 || d.Id == options.RobotId).ToArray();
-                if (devices.Length == 0) throw new ArgumentException("Selected robot_id not in config");
-                if (options.Real) YmConnectReader.CheckSdk();
-                string token = options.DryRun ? "" : config.ReadToken();
-                var tasks = devices.Select(device => Task.Run(async () =>
-                {
-                    try { await CollectorRunner.RunRobotAsync(config, device, options, token, stop.Token); }
-                    catch { stop.Cancel(); throw; }
-                }, CancellationToken.None)).ToArray();
-                await Task.WhenAll(tasks);
-                AppLog.Write("[RMS] Done");
-                return 0;
-            }
-            finally { Console.CancelKeyPress -= cancel; }
-        }
-        catch (OperationCanceledException) { AppLog.Write("[RMS] Stopped"); return 0; }
-        catch (Exception e) { Console.Error.WriteLine($"[ERROR] {e.Message}"); return 1; }
+        finally { nodes.Disconnect(device.Id, "Collector stopped"); }
     }
 }

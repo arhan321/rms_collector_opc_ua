@@ -1,33 +1,24 @@
-# Hasil migrasi Collector OPC UA
+# Revisi OPC UA Only v2 — 20 November 2026
 
-Tanggal: 20 November 2026. Source dasar: [rms-collector-net](https://github.com/arhan321/rms-collector-net/tree/63e9b1a5384d173b9cbee818fe4e8e9808e362ad).
+Alur: **Yaskawa → Collector C# / YMConnect → OPC UA → Ignition → Database**.
 
-## Cakupan
+## Perubahan utama
 
-Executable baru `rms_collector_opcua` mengganti jalur pengiriman Collector → HTTP API dengan penyediaan tag melalui OPC UA. Pembacaan robot tetap menggunakan kelas YMConnect asli. Ignition bertindak sebagai client untuk server di PC Collector.
+- `Configuration.cs` hanya berisi pengaturan robot, I/O dan interval polling. Konfigurasi URL API, token, HTTP timeout dan spool dihapus.
+- `Program.cs` menjadi entry point server OPC UA. Hanya `RmsCollector.csproj` yang menjadi proyek executable utama.
+- Source sender HTTP dan contoh konfigurasi lama dihapus dari project.
+- `Models.cs` menggunakan `SampleJson` untuk serialisasi tag snapshot. Endpoint dan serializer request lama dihapus.
+- Pembaca YMConnect dan pemetaan tag disesuaikan dengan helper baru; Node ID dan format JSON snapshot tetap sama.
+- Job polling ditentukan melalui `.conf`, tanpa environment fallback.
+- Build, publish, launcher, tes dan dokumentasi diarahkan ke satu proyek OPC UA.
+- Paket perubahan memuat isi lengkap file berubah dan alat untuk memindahkan file lama ke backup di luar project.
 
-Konfigurasi ada di `config/collector.opcua.conf` dan `config/robots.opcua.conf`. Proyek API lama tetap berada di source untuk kebutuhan transisi. Proyek baru tidak mengompilasi `src-csharp/Program.cs` atau `src-csharp/Transport.cs` sehingga tidak menjalankan HTTP transport maupun spool lama.
+## Verifikasi
 
-## Hasil verifikasi
+Tes integrasi OPC UA: **32 pemeriksaan lulus**, termasuk penolakan pengaturan transport lama, browse dua robot, secure session dengan certificate trust, subscription, pemetaan nilai, read failure, stale/recovery, isolasi robot dan penolakan write. Data robot dalam tes berasal dari simulasi.
 
-| Pemeriksaan | Hasil |
-| --- | --- |
-| Build/publish Release Windows x64, .NET 10 | Berhasil |
-| Format executable hasil publish | PE32+ Windows x86-64 |
-| Tes integrasi OPC UA | 25 pemeriksaan lulus |
-| Tes Collector asli | 14 tes lulus |
-| Pemeriksaan paket NuGet termasuk dependency transitif | Tidak dilaporkan vulnerable pada sumber yang tersedia saat pemeriksaan |
-| `git diff --check` | Lulus |
-| Tes dengan controller Yaskawa fisik | Belum dilakukan |
-| Tes pada Gateway Ignition pengguna | Belum dilakukan |
-| Integrasi Ignition → tabel Laravel | Belum diimplementasikan pada tahap ini |
+Build Release dan publish Windows x64 diverifikasi. Kode pengiriman HTTP tidak ditemukan pada source executable. Pengujian Windows fisik, Gateway Ignition pengguna dan robot DOJO belum dilakukan.
 
-Tes OPC membuka server dan client melalui jaringan loopback. Certificate publik ditukar secara eksplisit, client yang belum dipercaya ditolak, kemudian koneksi terenkripsi dibuat. Tes mencakup browse dua robot, subscription perubahan nilai, pemetaan torque/pulse/job/operating/I/O/alarm, pemisahan identitas robot, penolakan write, data sebelum pembacaan pertama, kegagalan baca, data non-finite, stale, disconnect dan recovery. Nilai robot pada tes berasal dari MockReader.
+Ignition perlu dikonfigurasi untuk menyimpan tag ke database. Paket Collector tidak memasang koneksi database, tidak membuat tabel pada database pengguna, dan tidak menulis data langsung ke SQL Server.
 
-## Perbedaan operasional yang perlu dipahami
-
-OPC UA memberikan nilai terbaru melalui read/subscription. Tidak ada jaminan replay seluruh sampel selama Ignition tidak terhubung dan tidak ada OPC historical-read dalam Collector ini. Penyimpanan histori dan pencegahan duplikasi alarm perlu diterapkan di sisi integrasi Ignition/SQL.
-
-Nama job berasal dari task Master. Group R1 dan maksimum 8 controller mengikuti batas pembaca asli. Data torque tetap dalam satuan `sdk_raw`. Migrasi transport tidak menambahkan diagnosis OEM Speed Reducer Life, ampere aktual, atau position error.
-
-Baca `PANDUAN_IGNITION_OPCUA.md` untuk penempatan file, build, pengaturan endpoint, beberapa robot, certificate trust, struktur tag dan langkah uji DOJO.
+Baca `PANDUAN_IGNITION_OPCUA.md` untuk koneksi Ignition dan `MIGRATION.md` untuk penempatan perubahan dari paket sebelumnya.

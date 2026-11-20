@@ -198,7 +198,7 @@ internal sealed class RmsNodeManager : CustomNodeManager2
             }
             // One self-contained snapshot for consumers needing coherent identity/axes/status.
             if (torqueOk == sample.Torque.Ok && pulseOk == sample.Position.Ok)
-                Set(p + "/Telemetry/SnapshotJson", ApiPayloads.Telemetry(device, session, sequence, at.ToString("O"), sample, mock), Quality(torqueOk || pulseOk), at);
+                Set(p + "/Telemetry/SnapshotJson", SampleJson.Snapshot(device, session, sequence, at.ToString("O"), sample, mock), Quality(torqueOk || pulseOk), at);
             else Set(p + "/Telemetry/SnapshotJson", null, StatusCodes.BadDecodingError, at);
             Set(p + "/Telemetry/SessionId", session, StatusCodes.Good, at);
             Set(p + "/Telemetry/Sequence", sequence, StatusCodes.Good, at);
@@ -239,14 +239,14 @@ internal sealed class RmsNodeManager : CustomNodeManager2
             {
                 Mark(device.Id, "Alarms", at, sample.Alarm.Ok);
                 Set(p + "/Alarms/ActiveCount", sample.Alarm.Ok ? sample.ActiveAlarmCount : null, Quality(sample.Alarm.Ok && sample.ActiveAlarmCount is not null), at);
-                Set(p + "/Alarms/ActiveJson", sample.Alarm.Ok ? ApiPayloads.Json(sample.ActiveAlarms) : null, Quality(sample.Alarm.Ok), at);
+                Set(p + "/Alarms/ActiveJson", sample.Alarm.Ok ? SampleJson.Json(sample.ActiveAlarms) : null, Quality(sample.Alarm.Ok), at);
                 Set(p + "/Alarms/HistoryReadOk", sample.AlarmHistory.Ok, StatusCodes.Good, at);
-                Set(p + "/Alarms/HistoryJson", sample.AlarmHistoryData is null ? null : ApiPayloads.Json(sample.AlarmHistoryData), Quality(sample.AlarmHistory.Ok), at);
+                Set(p + "/Alarms/HistoryJson", sample.AlarmHistoryData is null ? null : SampleJson.Json(sample.AlarmHistoryData), Quality(sample.AlarmHistory.Ok), at);
             }
             if (extras)
             {
                 Mark(device.Id, "IO", at, sample.Io.Ok);
-                Set(p + "/IO/Json", sample.IoData is null ? null : ApiPayloads.Json(sample.IoData), Quality(sample.Io.Ok), at);
+                Set(p + "/IO/Json", sample.IoData is null ? null : SampleJson.Json(sample.IoData), Quality(sample.Io.Ok), at);
                 var io = JsonSerializer.SerializeToElement(sample.IoData);
                 foreach (int address in device.Io)
                 {
@@ -256,7 +256,7 @@ internal sealed class RmsNodeManager : CustomNodeManager2
                 var system = JsonSerializer.SerializeToElement(sample.SystemInfoData);
                 bool systemOk = mock ? sample.SystemInfoData is not null : Bool(Get(system, "robot_r1"), "read_ok") == true;
                 Mark(device.Id, "System", at, systemOk);
-                Set(p + "/System/Json", sample.SystemInfoData is null ? null : ApiPayloads.Json(sample.SystemInfoData), Quality(systemOk), at);
+                Set(p + "/System/Json", sample.SystemInfoData is null ? null : SampleJson.Json(sample.SystemInfoData), Quality(systemOk), at);
             }
         }
     }

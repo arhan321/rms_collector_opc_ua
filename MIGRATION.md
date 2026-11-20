@@ -1,76 +1,38 @@
-# Migrasi Data Logger C++ ke C#
+# Memperbarui paket sebelumnya ke OPC UA Only v2
 
-## Dasar perubahan
+Paket v2 ini melanjutkan `RMS_OPCUA_FULL_SOURCE.zip` yang sebelumnya diberikan. Source pengiriman lama dibersihkan dan proyek utama menjadi satu executable OPC UA.
 
-- Repo: https://github.com/arhan321/collector_windows
-- Commit dasar: `4830eebc070b4e4e70a0ae8eb861e257fde559ec` pada `master`.
-- Runtime: .NET 10 LTS; Windows x64 untuk pembacaan nyata.
-- SDK: YMConnectDotNet Windows 1.1.10. API adapter diperiksa terhadap metadata DLL
-  resmi dan dikompilasi dengan referensi DLL tersebut.
-- Tidak ada NuGet pihak ketiga. HTTP, JSON, task dan filesystem memakai library .NET.
+## Pilihan 1 — memakai full source baru
 
-Kode C++ lama tetap ada di repo untuk referensi. Source ZIP membawa proyek C# aktif,
-SDK .NET dan dokumentasi. Patch dapat diterapkan pada checkout terpisah dari commit
-dasar; tidak membawa token pribadi, log data, queue produksi atau build lama.
+1. Hentikan Collector lama.
+2. Ekstrak `RMS_OPCUA_ONLY_FULL_SOURCE_V2.zip` ke folder baru.
+3. Salin konfigurasi robot dan endpoint milik sendiri dari dua file `.conf` sebelumnya, serta folder `pki-opcua` jika ingin mempertahankan certificate pada PC yang sama. Jangan membagikan private key.
+4. Jalankan `scripts\test.cmd`, kemudian `scripts\publish-opcua.cmd`.
+5. Jalankan aplikasi dari `publish\opcua`. Setelah koneksi benar, aktifkan logging database di Ignition.
 
-Untuk mulai paling mudah, ekstrak source ZIP ke folder baru dan buka folder yang
-berisi `RmsCollector.csproj` di VS Code. Source ZIP adalah proyek mandiri.
+## Pilihan 2 — memakai file perubahan saja
 
-Jika ingin menerapkan ke repo lama, buat checkout atau branch terpisah pada
-commit dasar di atas, lalu jalankan dari root repo:
+1. Hentikan Collector yang berjalan.
+2. Buat salinan folder project saat ini sebagai backup sebelum menimpa file.
+3. Simpan nilai endpoint dan `pki_dir` milik sendiri dari `config/collector.opcua.conf`. Paket perubahan memuat versi file konfigurasi itu dengan komentar yang diperbarui. `config/robots.opcua.conf` tidak berubah dari paket sebelumnya dan tidak ditimpa oleh ZIP perubahan.
+4. Ekstrak `RMS_OPCUA_ONLY_CHANGED_FILES_V2.zip` tepat ke root project, sejajar `RmsCollector.csproj`. Pilih replace untuk file yang berubah.
+5. Kembalikan nilai endpoint/path sesuai konfigurasi PC sendiri.
+6. Jalankan `BERSIHKAN_FILE_LAMA.cmd` dari root sebelum build. File lama dalam `FILE_YANG_DIHAPUS.txt` dan folder hasil build lama dipindahkan ke folder backup di sebelah project. Source lama tidak lagi berada di dalam project. Konfigurasi OPC UA, konfigurasi robot, SDK dan folder certificate tidak dipindah.
+7. Jalankan `scripts\test.cmd`, lalu `scripts\publish-opcua.cmd`.
+8. Jalankan executable/launcher baru dari `publish\opcua`; jangan gunakan binary lama dari folder lain.
 
-```powershell
-git apply --check "C:\lokasi\collector_windows_csharp.patch"
-git apply "C:\lokasi\collector_windows_csharp.patch"
-```
+ZIP tidak bisa menghapus file ketika hanya diekstrak, sehingga langkah pembersihan diperlukan untuk pembaruan di folder lama. Jika script tidak bisa berjalan, pindahkan secara manual file yang tercantum dalam daftar ke folder backup di luar project. Script Windows belum dijalankan pada PC pengguna; jika ada file terkunci, hentikan proses Collector dan ulangi.
 
-Patch binary tersedia di dalam source ZIP. Jika pemeriksaan gagal karena README
-atau file lain telah berubah, gunakan folder source mandiri dahulu dan tinjau
-perbedaannya; jangan memaksa overwrite. Repo GitHub belum diperbarui dari paket ini.
+## Perubahan lokasi
 
-## Kontrak yang dipertahankan
+| Sebelumnya | Sekarang |
+| --- | --- |
+| Proyek OPC UA terpisah di `opcua/` | Proyek utama `RmsCollector.csproj` |
+| Startup OPC UA di `opcua/OpcUaProgram.cs` | Startup tunggal di `src-csharp/Program.cs` |
+| Model snapshot memakai nama `ApiPayloads` | Helper JSON bernama `SampleJson` |
+| Tes lama dan tes OPC UA terpisah | `scripts\test.cmd` menjalankan tes OPC UA |
+| Konfigurasi dan sender lama ikut terbawa | Konfigurasi robot dan endpoint OPC UA saja |
 
-| Endpoint | Isi |
-|---|---|
-| `/api/v1/collector/connections` | robot_id, state, occurred_at UTC, ip_address dan simulated |
-| `/api/v1/collector/telemetry` | UUID sesi, sequence, sampled_at UTC, status read, enam axis SLURBT, sdk_raw dan metadata |
-| `/api/v1/collector/operating-times` | Empat time_type, value_raw, value_seconds diagnostik dan simulated |
-| `/api/v1/collector/alarms/snapshots` | sdk_text, alarm aktif, lima kategori history, status dan simulated |
+Node ID, nama tag, security policy, namespace dan format JSON snapshot tetap kompatibel dengan paket OPC UA sebelumnya. Pemisahan C# reader dan server OPC UA di source tetap dipertahankan untuk kemudahan perawatan.
 
-Field dicocokkan dengan controller API di
-`arhan321/laravel_yaskawa_sqlserv/src/app/Http/Controllers/Api`. ID robot dan token
-tetap milik lingkungan Laravel. Collector tidak menulis SQL secara langsung.
-
-## Perubahan perilaku yang disengaja
-
-- DLL native hanya dimuat saat check-sdk atau real. Mock/probe tidak memerlukannya.
-- Check-sdk membantu memeriksa pasangan DLL dan runtime tanpa menghubungi robot.
-- Config menerima komentar # dan //, termasuk contoh delapan robot lama.
-- HTTPS didukung; redirect dinonaktifkan dan proxy sistem dilewati untuk API lokal/LAN.
-- Backlog dikirim lebih dulu. Sample baru masuk antrean agar tidak mendahului sample
-  lama ketika API pulih. Semua payload replay dipertahankan, termasuk timestamp/UUID.
-- Satu proses C# memiliki lock spool per robot. Collector C++ tidak mengikuti lock
-  ini; hentikan versi lama sebelum menjalankan versi baru.
-- File queue atomik di-flush ke disk. Pembatalan request mempertahankan payload.
-- Queue dibatasi 1 MiB per file dan robot_id diperiksa sebelum replay; endpoint
-  dibatasi ke empat endpoint collector. File korup tidak dikirim/dihapus diam-diam.
-- Body respons HTTP maksimal 64 KiB dan diagnostik maksimal 4096 karakter.
-
-## Verifikasi
-
-Perintah: `dotnet run --project tests/RmsCollector.Tests.csproj -c Release`.
-Harness tanpa framework test eksternal mencakup guard CLI, validasi config, kontrak
-JSON, null/zero semantics, empat counter, Unicode, outage/FIFO replay, penolakan
-permanen, quarantine queue lama, file korup, pembatalan, lock spool, antrean penuh,
-dry-run tanpa side effect dan reconnect setelah tiga pembacaan gagal.
-
-Mock C++ lama dibandingkan secara semantik dengan C#: tujuh payload per siklus
-pada empat endpoint. Waktu pengambilan dan UUID sesi berbeda secara alami; field
-lain dibandingkan dengan toleransi floating point. SHA256 archive SDK dicocokkan
-dengan metadata rilis resmi.
-
-Windows x64 self-contained dibuat dengan cross-publish. Belum dijalankan pada
-Windows atau robot fisik dalam lingkungan pengerjaan ini. Uji check-sdk, real once
-dry-run, lalu POST pada Windows DOJO sebelum penggunaan kontinu.
-
-Tidak ada perubahan Ignition/OPC UA atau aturan bukti operating time PM dalam migrasi.
+Tidak ada script pembaruan yang memasang database atau menulis row di SQL Server. Pengaturan database dilakukan melalui Ignition.

@@ -1,6 +1,6 @@
 # Third-party packages
 
-OPC UA dependency versions are pinned in `opcua/packages.lock.json`. Original package license texts available in the NuGet packages are reproduced in this folder. The YMConnect license is retained separately in `sdk/dotnet/LICENSE` and copied into published `licenses/YMConnect-LICENSE`.
+OPC UA dependency versions are pinned in `packages.lock.json`. Original package license texts available in the NuGet packages are reproduced in this folder. The YMConnect license is retained separately in `sdk/dotnet/LICENSE` and copied into published `licenses/YMConnect-LICENSE`.
 
 | Package | Version | License metadata | Project / package |
 | --- | --- | --- | --- |

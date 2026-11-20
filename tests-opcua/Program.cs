@@ -22,6 +22,19 @@ internal static class Program
         Directory.CreateDirectory(temp);
         try
         {
+            string migrationConfig = Path.Combine(temp, "migration.conf");
+            File.WriteAllText(migrationConfig, "robot=1,127.0.0.1,R1\n");
+            Check(CollectorConfig.Load(migrationConfig).JobEverySample, "OPC UA defaults to reading job at every telemetry sample");
+            foreach (string removedKey in new[] { "api_base", "token_file", "spool_dir", "http_timeout_s", "spool_max" })
+            {
+                File.WriteAllText(migrationConfig, $"robot=1,127.0.0.1,R1\n{removedKey}=obsolete\n");
+                bool rejected = false;
+                try { _ = CollectorConfig.Load(migrationConfig); }
+                catch (InvalidDataException) { rejected = true; }
+                Check(rejected, $"removed transport setting '{removedKey}' cannot re-enable the old transport");
+            }
+            File.WriteAllText(migrationConfig, "robot=1,127.0.0.1,R1\njob_monitor_every_sample=0\n");
+            Check(!CollectorConfig.Load(migrationConfig).JobEverySample, "job polling can still use the extras interval through the configuration file");
             string robotConfig = Path.Combine(temp, "robots.conf");
             File.WriteAllText(robotConfig, "telemetry_ms=1000\noperating_every_s=5\nalarms_every_s=5\nextras_every_s=5\njob_monitor_every_sample=1\nrobot=1,127.0.0.1,R1,10;10010\nrobot=2,127.0.0.2,R1,10\n");
             var robots = CollectorConfig.Load(robotConfig);

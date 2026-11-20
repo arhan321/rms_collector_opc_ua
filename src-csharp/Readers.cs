@@ -38,17 +38,17 @@ internal sealed class MockReader(Device device, bool jobEverySample = false) : I
             s.AlarmHistoryData = Array.Empty<object>();
         }
         s.State = new(true, 0, "", "SIMULATED");
-        s.StateData = ApiPayloads.Map(("known", true), ("servo_on", false), ("running", false), ("alarm", false),
+        s.StateData = SampleJson.Map(("known", true), ("servo_on", false), ("running", false), ("alarm", false),
             ("hold", true), ("error", false), ("control_mode", "Teach"), ("cycle_mode", "Step"), ("source", "mock"));
         if (extras || jobEverySample)
         {
             s.Job = new(true, 0, "", "SIMULATED");
-            s.JobReadAt = ApiPayloads.Timestamp();
-            s.JobData = ApiPayloads.Map(("name", "MOCK_JOB"), ("line", 2), ("step", sequence % 50), ("speed_override_percent", 50), ("source", "mock"));
+            s.JobReadAt = SampleJson.Timestamp();
+            s.JobData = SampleJson.Map(("name", "MOCK_JOB"), ("line", 2), ("step", sequence % 50), ("speed_override_percent", 50), ("source", "mock"));
         }
         if (extras)
         {
-            s.SystemInfoData = ApiPayloads.Map(("simulated", true));
+            s.SystemInfoData = SampleJson.Map(("simulated", true));
             s.Io = new(true, 0, "", "SIMULATED");
             s.IoData = device.Io.ToDictionary(a => a.ToString(System.Globalization.CultureInfo.InvariantCulture), a => (sequence + a) % 256);
         }

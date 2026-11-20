@@ -2,7 +2,7 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
-    <AssemblyName>rms_collector</AssemblyName>
+    <AssemblyName>rms_collector_opcua</AssemblyName>
     <RootNamespace>RmsCollector</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -11,30 +11,25 @@
     <PublishAot>false</PublishAot>
     <PublishTrimmed>false</PublishTrimmed>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="src-csharp/**/*.cs" />
+    <PackageReference Include="OPCFoundation.NetStandard.Opc.Ua.Server" Version="1.5.378.196" />
+    <PackageReference Include="OPCFoundation.NetStandard.Opc.Ua.Configuration" Version="1.5.378.196" />
+    <Compile Include="src-csharp/AssemblyInfo.cs;src-csharp/Configuration.cs;src-csharp/JobMonitorEvidence.cs;src-csharp/Models.cs;src-csharp/Program.cs;src-csharp/Readers.cs;src-csharp/YmConnectReader.cs" />
+    <Compile Include="opcua/OpcUaHost.cs;opcua/OpcUaSettings.cs;opcua/RmsNodeManager.cs" />
     <Reference Include="YMConnect_CS">
       <HintPath>sdk/dotnet/YMConnect_CS.dll</HintPath>
       <Private>true</Private>
     </Reference>
-    <None Include="sdk/dotnet/YMConnect.dll" Link="YMConnect.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <None Update="config/**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <None Update="collector.token.example" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <None Include="sdk/dotnet/LICENSE" Link="licenses/YMConnect-LICENSE" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <None Update="THIRD-PARTY-NOTICES.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <None Update="deploy/windows/*" Link="%(Filename)%(Extension)" CopyToPublishDirectory="PreserveNewest" />
-    <None Update="PANDUAN_WINDOWS.md" CopyToPublishDirectory="PreserveNewest" />
+    <None Update="sdk/dotnet/YMConnect.dll" Link="YMConnect.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Update="sdk/dotnet/LICENSE" Link="licenses/YMConnect-LICENSE" CopyToPublishDirectory="PreserveNewest" />
+    <None Update="opcua/licenses/**" Link="licenses/%(Filename)%(Extension)" CopyToPublishDirectory="PreserveNewest" />
+    <None Update="config/collector.opcua.conf;config/robots.opcua.conf" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Update="PANDUAN_IGNITION_OPCUA.md;RINGKASAN_PERUBAHAN_OPCUA.md" CopyToPublishDirectory="PreserveNewest" />
+    <None Update="deploy/windows/*OPCUA.cmd;deploy/windows/CHECK_SDK.cmd;deploy/windows/TEST_MOCK.cmd;deploy/windows/MULAI_DI_SINI.txt" Link="%(Filename)%(Extension)" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
   <Target Name="CheckVendorSdk" BeforeTargets="ResolveAssemblyReferences">
-    <Error Condition="!Exists('sdk/dotnet/YMConnect_CS.dll') Or !Exists('sdk/dotnet/YMConnect.dll')" Text="Extract the matching official YMConnectDotNet Windows SDK into sdk/dotnet. Both YMConnect_CS.dll and YMConnect.dll are required. See readme.md." />
-  </Target>
-  <Target Name="PreserveRuntimeLicenses" AfterTargets="Publish" Condition="'$(SelfContained)' == 'true'">
-    <ItemGroup>
-      <RuntimeLicense Include="@(ResolvedRuntimePack->'%(PackageDirectory)/LICENSE.TXT')" />
-      <RuntimeLicense Include="@(ResolvedRuntimePack->'%(PackageDirectory)/THIRD-PARTY-NOTICES.TXT')" />
-      <RuntimeLicense Remove="@(RuntimeLicense)" Condition="!Exists('%(Identity)')" />
-    </ItemGroup>
-    <Copy SourceFiles="@(RuntimeLicense)" DestinationFolder="$(PublishDir)licenses/dotnet" SkipUnchangedFiles="true" />
+    <Error Condition="!Exists('sdk/dotnet/YMConnect_CS.dll') Or !Exists('sdk/dotnet/YMConnect.dll')" Text="Keep the official matching YMConnect_CS.dll and YMConnect.dll in sdk/dotnet." />
   </Target>
 </Project>
