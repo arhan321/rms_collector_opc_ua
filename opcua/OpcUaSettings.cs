@@ -23,4 +23,4 @@ internal sealed record OpcUaSettings(CollectorConfig Robots, Uri Endpoint, strin
             throw new InvalidDataException("endpoint must be an opc.tcp://collector-host:port/path URL");
         return new(CollectorConfig.Load(robotConfig), endpoint, Path.GetFullPath(values.GetValueOrDefault("pki_dir", "./pki-opcua")));
     }
-}
+} 
