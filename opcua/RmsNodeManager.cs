@@ -32,6 +32,7 @@ internal sealed class RmsNodeManager : CustomNodeManager2
             ["IO"] = config.ExtrasSeconds * 2 + 5,
             ["System"] = config.ExtrasSeconds * 2 + 5
         };
+        if (mock) ttls["Simulation"] = telemetryTtl;
     }
 
     public override void CreateAddressSpace(IDictionary<NodeId, IList<IReference>> externalReferences)
@@ -60,6 +61,25 @@ internal sealed class RmsNodeManager : CustomNodeManager2
         Static(robot, path + "/Connected", DataTypeIds.Boolean, false);
         Static(robot, path + "/HasFreshTelemetry", DataTypeIds.Boolean, false);
         Static(robot, path + "/ConnectionMessage", DataTypeIds.String, "Waiting for robot data");
+        if (mock)
+        {
+            var profile = device.MockProfile;
+            var identity = Folder(robot, path + "/Identity", "Identity");
+            foreach (var (name, value) in new[] { ("RobotCode", profile.RobotCode), ("Name", profile.Name),
+                ("Model", profile.Model), ("ControllerModel", profile.ControllerModel), ("SerialNumber", profile.SerialNumber),
+                ("LineName", profile.LineName), ("StationName", profile.StationName) })
+                Static(identity, path + "/Identity/" + name, DataTypeIds.String, value);
+            Static(identity, path + "/Identity/AxisCount", DataTypeIds.Int32, 6);
+            Static(identity, path + "/Identity/Json", DataTypeIds.String, SampleJson.Json(profile.Identity(device)));
+            var home = Folder(identity, path + "/Identity/ReferenceHome", "ReferenceHome");
+            for (int i = 0; i < Axes.Length; i++) Static(home, path + "/Identity/ReferenceHome/" + Axes[i], DataTypeIds.Double, profile.HomePulses[i]);
+            var simulation = Stream(robot, path, "Simulation");
+            foreach (string name in new[] { "Phase", "HomeStatus", "Json" }) Variable(simulation, path + "/Simulation/" + name, DataTypeIds.String);
+            Variable(simulation, path + "/Simulation/CycleSecond", DataTypeIds.Double);
+            Variable(simulation, path + "/Simulation/CycleIndex", DataTypeIds.Int64);
+            Variable(simulation, path + "/Simulation/CompletedDemoJobs", DataTypeIds.Int64);
+            Variable(simulation, path + "/Simulation/CommunicationAvailable", DataTypeIds.Boolean);
+        }
 
         var telemetry = Stream(robot, path, "Telemetry");
         Variable(telemetry, path + "/Telemetry/SessionId", DataTypeIds.String);
@@ -180,8 +200,20 @@ internal sealed class RmsNodeManager : CustomNodeManager2
         lock (Lock)
         {
             string p = $"RMS/Robots/{device.Id}";
-            Set(p + "/Connected", true, StatusCodes.Good, at);
-            Set(p + "/ConnectionMessage", mock ? "SIMULATED DATA" : "YMConnect connected", StatusCodes.Good, at);
+            bool communicating = sample.Simulation?.CommunicationAvailable ?? true;
+            Set(p + "/Connected", communicating, StatusCodes.Good, at);
+            Set(p + "/ConnectionMessage", mock ? "SIMULATED: " + (sample.Simulation?.Phase ?? "data") : "YMConnect connected", StatusCodes.Good, at);
+            if (mock && sample.Simulation is { } simulation)
+            {
+                Mark(device.Id, "Simulation", at, true);
+                Set(p + "/Simulation/Phase", simulation.Phase, Quality(true), at);
+                Set(p + "/Simulation/HomeStatus", simulation.HomeStatus, Quality(true), at);
+                Set(p + "/Simulation/CycleSecond", simulation.PhaseSecond, Quality(true), at);
+                Set(p + "/Simulation/CycleIndex", simulation.CycleIndex, Quality(true), at);
+                Set(p + "/Simulation/CompletedDemoJobs", simulation.CompletedJobs, Quality(true), at);
+                Set(p + "/Simulation/CommunicationAvailable", simulation.CommunicationAvailable, Quality(true), at);
+                Set(p + "/Simulation/Json", SampleJson.Json(simulation.Payload()), Quality(true), at);
+            }
             bool torqueOk = sample.Torque.Ok && sample.Torques.Length >= 6 && sample.Torques.Take(6).All(double.IsFinite);
             bool pulseOk = sample.Position.Ok && sample.Pulses.Length >= 6 && sample.Pulses.Take(6).All(double.IsFinite);
             Mark(device.Id, "Telemetry", at, torqueOk || pulseOk);

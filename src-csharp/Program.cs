@@ -44,6 +44,8 @@ internal static class OpcUaProgram
             }
             if (mock == real) throw new ArgumentException("Choose exactly one of --real or --mock");
             var settings = OpcUaSettings.Load(path);
+            if (real && settings.Robots.SimulationOnly)
+                throw new InvalidOperationException("This configuration is simulation-only. Use --mock, or use your separate verified real-robot configuration.");
             if (real) YmConnectReader.CheckSdk();
             using var cancellation = new CancellationTokenSource();
             if (duration > 0) cancellation.CancelAfter(TimeSpan.FromSeconds(duration));
@@ -55,6 +57,8 @@ internal static class OpcUaProgram
                 AppLog.Write($"[OPCUA] {settings.Endpoint} | namespace={RmsNodeManager.NamespaceUri}");
                 AppLog.Write($"[OPCUA] {(mock ? "SIMULATED DATA: not actual robot" : "YMConnect read-only data")} | security=Basic256Sha256/SignAndEncrypt");
                 AppLog.Write($"[OPCUA] Trust the Ignition client certificate in {settings.PkiDirectory}/trusted/certs");
+                foreach (var device in settings.Robots.Devices)
+                    AppLog.Write($"[ROBOT] id={device.Id} ip={device.Ip} group={device.Group} source={(mock ? "SIMULATION" : "YMConnect")}");
                 var tasks = settings.Robots.Devices.Select(device => Task.Run(async () =>
                 {
                     try { await OpcUaRunner.RunAsync(settings.Robots, device, host.Nodes, mock, cancellation.Token); }
@@ -75,10 +79,11 @@ internal static class OpcUaRunner
     public static async Task RunAsync(CollectorConfig config, Device device, RmsNodeManager nodes, bool mock,
         CancellationToken cancellation, Func<IRobotReader>? factory = null)
     {
-        using var reader = factory?.Invoke() ?? (mock ? (IRobotReader)new MockReader(device, config.JobEverySample) : new YmConnectReader(device, config.JobEverySample));
+        using var reader = factory?.Invoke() ?? (mock ? (IRobotReader)new MockReader(device, config.JobEverySample, config.TelemetryMs) : new YmConnectReader(device, config.JobEverySample));
         string session = Guid.NewGuid().ToString();
         long sequence = 0;
         int badReads = 0;
+        string? lastSimulationPhase = null;
         var clock = Stopwatch.StartNew();
         TimeSpan nextOperating = TimeSpan.Zero, nextAlarms = TimeSpan.Zero, nextExtras = TimeSpan.Zero;
         try
@@ -94,6 +99,11 @@ internal static class OpcUaRunner
                 {
                     bool operating = start >= nextOperating, alarms = start >= nextAlarms, extras = start >= nextExtras;
                     var sample = reader.Collect(sequence, extras, operating, alarms);
+                    if (mock && sample.Simulation is { } simulation && simulation.Phase != lastSimulationPhase)
+                    {
+                        AppLog.Write($"[SIM robot={device.Id} ip={device.Ip}] phase={simulation.Phase} home={simulation.HomeStatus}");
+                        lastSimulationPhase = simulation.Phase;
+                    }
                     nodes.Publish(device, sample, session, sequence++, DateTime.UtcNow, operating, alarms, extras);
                     if (sample.Position.Ok || sample.Torque.Ok) badReads = 0;
                     else if (++badReads >= 3)

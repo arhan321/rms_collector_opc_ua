@@ -1,0 +1,245 @@
+{
+  "schema_version": 1,
+  "robots": [
+    {
+      "robot_id": 1,
+      "robot_code": "SIM_R01",
+      "name": "SIM Robot 01",
+      "model": "SP210",
+      "controller_model": "YRC1000",
+      "serial_number": "SIMULATED-001",
+      "line_name": "SIM Welding 1",
+      "station_name": "SIM Station 01",
+      "home_pulses": [
+        152870,
+        -109862,
+        -51918,
+        598,
+        -257242,
+        75088
+      ],
+      "jobs": [
+        "MASTER",
+        "TRIAL_SPOT"
+      ],
+      "phase_offset_seconds": 0,
+      "torque_scale": 0.85,
+      "initial_operating_hours": [
+        21445.37,
+        12978.41,
+        7113.27,
+        993.63
+      ]
+    },
+    {
+      "robot_id": 2,
+      "robot_code": "SIM_R02",
+      "name": "SIM Robot 02",
+      "model": "SP210",
+      "controller_model": "YRC1000",
+      "serial_number": "SIMULATED-002",
+      "line_name": "SIM Welding 1",
+      "station_name": "SIM Station 02",
+      "home_pulses": [
+        153870,
+        -109862,
+        -51918,
+        598,
+        -257242,
+        75088
+      ],
+      "jobs": [
+        "MASTER",
+        "TRIAL_SPOT"
+      ],
+      "phase_offset_seconds": 22,
+      "torque_scale": 0.9,
+      "initial_operating_hours": [
+        21645.37,
+        13078.41,
+        7173.27,
+        1013.63
+      ]
+    },
+    {
+      "robot_id": 3,
+      "robot_code": "SIM_R03",
+      "name": "SIM Robot 03",
+      "model": "SP210",
+      "controller_model": "YRC1000",
+      "serial_number": "SIMULATED-003",
+      "line_name": "SIM Welding 1",
+      "station_name": "SIM Station 03",
+      "home_pulses": [
+        154870,
+        -109862,
+        -51918,
+        598,
+        -257242,
+        75088
+      ],
+      "jobs": [
+        "MASTER",
+        "TRIAL_SPOT"
+      ],
+      "phase_offset_seconds": 44,
+      "torque_scale": 0.95,
+      "initial_operating_hours": [
+        21845.37,
+        13178.41,
+        7233.27,
+        1033.63
+      ]
+    },
+    {
+      "robot_id": 4,
+      "robot_code": "SIM_R04",
+      "name": "SIM Robot 04",
+      "model": "SP210",
+      "controller_model": "YRC1000",
+      "serial_number": "SIMULATED-004",
+      "line_name": "SIM Welding 1",
+      "station_name": "SIM Station 04",
+      "home_pulses": [
+        155870,
+        -109862,
+        -51918,
+        598,
+        -257242,
+        75088
+      ],
+      "jobs": [
+        "MASTER",
+        "TRIAL_SPOT"
+      ],
+      "phase_offset_seconds": 66,
+      "torque_scale": 1.0,
+      "initial_operating_hours": [
+        22045.37,
+        13278.41,
+        7293.27,
+        1053.63
+      ]
+    },
+    {
+      "robot_id": 5,
+      "robot_code": "SIM_R05",
+      "name": "SIM Robot 05",
+      "model": "SP210",
+      "controller_model": "YRC1000",
+      "serial_number": "SIMULATED-005",
+      "line_name": "SIM Welding 2",
+      "station_name": "SIM Station 05",
+      "home_pulses": [
+        156870,
+        -109862,
+        -51918,
+        598,
+        -257242,
+        75088
+      ],
+      "jobs": [
+        "MASTER",
+        "TRIAL_SPOT"
+      ],
+      "phase_offset_seconds": 88,
+      "torque_scale": 1.05,
+      "initial_operating_hours": [
+        22245.37,
+        13378.41,
+        7353.27,
+        1073.63
+      ]
+    },
+    {
+      "robot_id": 6,
+      "robot_code": "SIM_R06",
+      "name": "SIM Robot 06",
+      "model": "SP210",
+      "controller_model": "YRC1000",
+      "serial_number": "SIMULATED-006",
+      "line_name": "SIM Welding 2",
+      "station_name": "SIM Station 06",
+      "home_pulses": [
+        157870,
+        -109862,
+        -51918,
+        598,
+        -257242,
+        75088
+      ],
+      "jobs": [
+        "MASTER",
+        "TRIAL_SPOT"
+      ],
+      "phase_offset_seconds": 110,
+      "torque_scale": 1.1,
+      "initial_operating_hours": [
+        22445.37,
+        13478.41,
+        7413.27,
+        1093.63
+      ]
+    },
+    {
+      "robot_id": 7,
+      "robot_code": "SIM_R07",
+      "name": "SIM Robot 07",
+      "model": "SP210",
+      "controller_model": "YRC1000",
+      "serial_number": "SIMULATED-007",
+      "line_name": "SIM Welding 2",
+      "station_name": "SIM Station 07",
+      "home_pulses": [
+        158870,
+        -109862,
+        -51918,
+        598,
+        -257242,
+        75088
+      ],
+      "jobs": [
+        "MASTER",
+        "TRIAL_SPOT"
+      ],
+      "phase_offset_seconds": 132,
+      "torque_scale": 1.15,
+      "initial_operating_hours": [
+        22645.37,
+        13578.41,
+        7473.27,
+        1113.63
+      ]
+    },
+    {
+      "robot_id": 8,
+      "robot_code": "SIM_R08",
+      "name": "SIM Robot 08",
+      "model": "SP210",
+      "controller_model": "YRC1000",
+      "serial_number": "SIMULATED-008",
+      "line_name": "SIM Welding 2",
+      "station_name": "SIM Station 08",
+      "home_pulses": [
+        159870,
+        -109862,
+        -51918,
+        598,
+        -257242,
+        75088
+      ],
+      "jobs": [
+        "MASTER",
+        "TRIAL_SPOT"
+      ],
+      "phase_offset_seconds": 154,
+      "torque_scale": 1.2,
+      "initial_operating_hours": [
+        22845.37,
+        13678.41,
+        7533.27,
+        1133.63
+      ]
+    }
+  ]
+}

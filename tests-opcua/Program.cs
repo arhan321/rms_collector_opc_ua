@@ -22,6 +22,9 @@ internal static class Program
         Directory.CreateDirectory(temp);
         try
         {
+            MockChecks.Run(Check, temp);
+            Check(await OpcUaProgram.Main(["--config", "config/collector.mock8.conf", "--real"]) == 1,
+                "simulation-only configuration rejects --real before loading the native SDK");
             string migrationConfig = Path.Combine(temp, "migration.conf");
             File.WriteAllText(migrationConfig, "robot=1,127.0.0.1,R1\n");
             Check(CollectorConfig.Load(migrationConfig).JobEverySample, "OPC UA defaults to reading job at every telemetry sample");
@@ -35,9 +38,7 @@ internal static class Program
             }
             File.WriteAllText(migrationConfig, "robot=1,127.0.0.1,R1\njob_monitor_every_sample=0\n");
             Check(!CollectorConfig.Load(migrationConfig).JobEverySample, "job polling can still use the extras interval through the configuration file");
-            string robotConfig = Path.Combine(temp, "robots.conf");
-            File.WriteAllText(robotConfig, "telemetry_ms=1000\noperating_every_s=5\nalarms_every_s=5\nextras_every_s=5\njob_monitor_every_sample=1\nrobot=1,127.0.0.1,R1,10;10010\nrobot=2,127.0.0.2,R1,10\n");
-            var robots = CollectorConfig.Load(robotConfig);
+            var robots = CollectorConfig.Load("config/robots.mock8.conf");
             // Reserve an ephemeral loopback port; the server binds immediately afterwards.
             var listener = new TcpListener(IPAddress.Loopback, 0);
             listener.Start();
@@ -116,7 +117,7 @@ internal static class Program
                 new() { NodeId = new NodeId("RMS/Robots", ns), BrowseDirection = BrowseDirection.Forward,
                     ReferenceTypeId = ReferenceTypeIds.HierarchicalReferences, IncludeSubtypes = true, ResultMask = (uint)BrowseResultMask.All }
             }, CancellationToken.None);
-            Check(browse.Results[0].References.Count == 2, "two robots can be browsed separately");
+            Check(browse.Results[0].References.Count == 8, "eight robots can be browsed separately");
             using var reader = new MockReader(robots.Devices[0], true);
             reader.Connect();
             var sample = reader.Collect(1, true, true, true);
@@ -125,13 +126,42 @@ internal static class Program
             var torque = await Read("Telemetry/Torque/S");
             Check(torque.StatusCode == StatusCodes.UncertainSubstituteValue && Math.Abs((double)torque.Value - sample.Torques[0]) < 1e-8, "axis value is correct and mock quality is Uncertain");
             Check(Math.Abs((torque.SourceTimestamp - sampled).TotalMilliseconds) < 1, "OPC source timestamp preserves collector sample time");
-            Check((string)(await Read("Job/Name")).Value == "MOCK_JOB", "job identity is available as an OPC tag");
-            Check((long)(await Read("Operating/MovingTimeRobot/Seconds")).Value == 81 * 3600L + 5, "operating counter preserves seconds");
-            Check((int)(await Read("IO/Byte10")).Value == 11, "I/O byte is mapped without changing its value");
+            Check((string)(await Read("Job/Name")).Value == "MASTER", "job identity is available as an OPC tag");
+            Check((long)(await Read("Operating/MovingTimeRobot/Seconds")).Value == sample.OperatingReadings.Single(r => r.Type == "MovingTimeRobot").Seconds, "operating counter preserves seconds");
+            Check((int)(await Read("IO/Byte10")).Value == 16, "nested I/O byte payload is mapped without changing its value");
             Check((int)(await Read("Alarms/ActiveCount")).Value == 0 && (await Read("Alarms/ActiveCount")).StatusCode == StatusCodes.UncertainSubstituteValue, "successful empty alarm result is distinguished from read failure");
             using (var json = JsonDocument.Parse((string)(await Read("Telemetry/SnapshotJson")).Value))
                 Check(json.RootElement.GetProperty("sequence").GetInt64() == 1 && json.RootElement.GetProperty("raw_payload").GetProperty("simulated").GetBoolean(), "JSON snapshot carries identity, sequence and simulation metadata");
             Check((await Read("Telemetry/Torque/S", 2)).StatusCode == StatusCodes.BadWaitingForInitialData, "robot 1 cannot populate robot 2");
+            foreach (var device in robots.Devices.Skip(1))
+            {
+                using var virtualReader = new MockReader(device, true, robots.TelemetryMs);
+                host.Nodes.Publish(device, virtualReader.Collect(0, true, true, true), "robot-" + device.Id, 0, DateTime.UtcNow, true, true, true);
+                Check((string)(await Read("IpAddress", device.Id)).Value == device.Ip &&
+                    (string)(await Read("Identity/RobotCode", device.Id)).Value == device.MockProfile.RobotCode &&
+                    (await Read("Telemetry/Torque/S", device.Id)).StatusCode == StatusCodes.UncertainSubstituteValue,
+                    $"robot {device.Id} publishes its own IP, identity and simulated axes over OPC UA");
+            }
+            using (var manifest = JsonDocument.Parse(File.ReadAllText("ignition/tag-manifest.json")))
+            {
+                var definitions = manifest.RootElement.GetProperty("tags").EnumerateArray().ToArray();
+                foreach (var device in robots.Devices)
+                {
+                    var result = await session.ReadAsync(null, 0, TimestampsToReturn.Both,
+                        new ReadValueIdCollection(definitions.Select(definition => new ReadValueId
+                        {
+                            NodeId = Id(definition.GetProperty("path").GetString()!, device.Id), AttributeId = Attributes.Value
+                        })), CancellationToken.None);
+                    bool TypeMatches(object value, string kind) => kind switch
+                    {
+                        "Boolean" => value is bool, "Int4" => value is int, "Int8" => value is long,
+                        "Float8" => value is double, "DateTime" => value is DateTime, "String" => value is string, _ => false
+                    };
+                    Check(result.Results.Count == definitions.Length && result.Results.Select((value, i) =>
+                        !StatusCode.IsBad(value.StatusCode) && TypeMatches(value.Value, definitions[i].GetProperty("dataType").GetString()!)).All(valid => valid),
+                        $"all {definitions.Length} Ignition import paths/types exist on the real OPC UA server for robot {device.Id}");
+                }
+            }
 
             var write = await session.WriteAsync(null, new WriteValueCollection
             {
@@ -165,6 +195,18 @@ internal static class Program
             Check(!(bool)(await Read("HasFreshTelemetry")).Value, "stale connection is visible to Ignition");
             host.Nodes.Publish(robots.Devices[0], reader.Collect(5, true, true, true), "test-session", 5, DateTime.UtcNow, true, true, true);
             Check((await Read("Telemetry/Torque/S")).StatusCode == StatusCodes.UncertainSubstituteValue && (bool)(await Read("HasFreshTelemetry")).Value, "fresh data recovers after stale detection");
+            using (var phaseReader = new MockReader(robots.Devices[0], true, 1000))
+            {
+                host.Nodes.Publish(robots.Devices[0], phaseReader.Collect(170, true, true, true), "phase-test", 170, DateTime.UtcNow, true, true, true);
+                Check(!(bool)(await Read("Connected")).Value &&
+                    (await Read("Status/ServoOn")).Value is null && StatusCode.IsBad((await Read("Status/ServoOn")).StatusCode) &&
+                    (string)(await Read("Simulation/HomeStatus")).Value == "UNKNOWN" &&
+                    (await Read("Operating/ControllerOnTime/Seconds")).Value is null,
+                    "simulated communication loss reaches OPC UA as disconnected, Unknown and Bad values");
+                host.Nodes.Publish(robots.Devices[0], phaseReader.Collect(176, true, true, true), "phase-test", 176, DateTime.UtcNow, true, true, true);
+                Check((bool)(await Read("Connected")).Value && (await Read("Status/ServoOn")).StatusCode == StatusCodes.UncertainSubstituteValue,
+                    "simulated communication recovery is visible over OPC UA");
+            }
             host.Nodes.Disconnect(1, "test disconnect");
             Check(!(bool)(await Read("Connected")).Value && StatusCode.IsBad((await Read("Job/Name")).StatusCode), "disconnect invalidates robot data");
             await session.CloseAsync(CancellationToken.None);

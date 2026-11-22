@@ -2,7 +2,10 @@ using System.Globalization;
 
 namespace RmsCollector;
 
-internal sealed record Device(int Id, string Ip, string Group, int[] Io);
+internal sealed record Device(int Id, string Ip, string Group, int[] Io)
+{
+    public MockRobotProfile MockProfile { get; set; } = MockRobotProfile.Default(Id);
+}
 
 internal sealed class CollectorConfig
 {
@@ -11,6 +14,7 @@ internal sealed class CollectorConfig
     public int AlarmSeconds { get; private set; } = 30;
     public int ExtrasSeconds { get; private set; } = 10;
     public bool JobEverySample { get; private set; } = true;
+    public bool SimulationOnly { get; private set; }
     public List<Device> Devices { get; } = [];
 
     internal static int Integer(string key, string value, int min, int max)
@@ -25,6 +29,7 @@ internal sealed class CollectorConfig
         if (!File.Exists(path)) throw new FileNotFoundException($"Missing config: {path}");
         var c = new CollectorConfig();
         var seenKeys = new HashSet<string>(StringComparer.Ordinal);
+        string? simulationProfiles = null;
         int lineNumber = 0;
         foreach (string source in File.ReadLines(path))
         {
@@ -42,6 +47,8 @@ internal sealed class CollectorConfig
                 case "alarms_every_s": c.AlarmSeconds = Integer(key, value, 5, 86400); break;
                 case "extras_every_s": c.ExtrasSeconds = Integer(key, value, 5, 86400); break;
                 case "job_monitor_every_sample": c.JobEverySample = Integer(key, value, 0, 1) == 1; break;
+                case "simulation_only": c.SimulationOnly = Integer(key, value, 0, 1) == 1; break;
+                case "simulation_profiles": simulationProfiles = value; break;
                 case "robot": c.Devices.Add(ParseDevice(value)); break;
                 default: throw new InvalidDataException($"Unknown config key: {key}");
             }
@@ -50,6 +57,11 @@ internal sealed class CollectorConfig
         if (c.Devices.Select(d => d.Id).Distinct().Count() != c.Devices.Count ||
             c.Devices.Select(d => d.Ip).Distinct(StringComparer.OrdinalIgnoreCase).Count() != c.Devices.Count)
             throw new InvalidDataException("Duplicate robot ID/IP");
+        if (simulationProfiles is not null)
+        {
+            if (!c.SimulationOnly) throw new InvalidDataException("simulation_profiles requires simulation_only=1");
+            MockRobotProfile.Load(simulationProfiles, c.Devices);
+        }
         return c;
     }
 

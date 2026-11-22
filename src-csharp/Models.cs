@@ -26,6 +26,7 @@ internal sealed class RobotSample
     public object? AlarmHistoryData { get; set; }
     public object? SystemInfoData { get; set; }
     public object[] ActiveAlarms { get; set; } = [];
+    public MockObservation? Simulation { get; set; }
 }
 
 internal static class SampleJson
@@ -51,10 +52,15 @@ internal static class SampleJson
             ("state_read", Availability(s.State)), ("job_read", Availability(s.Job)),
             ("io_read", Availability(s.Io)), ("alarm_history_read", Availability(s.AlarmHistory)));
         data["job_monitor"] = JobMonitorEvidence.FromSample(s, mock);
+        if (mock)
+        {
+            data["robot_identity"] = d.MockProfile.Identity(d);
+            data["simulation"] = s.Simulation?.Payload();
+        }
         return data;
     }
     public static string Snapshot(Device d, string session, long seq, string at, RobotSample s, bool mock) => Json(Map(
-        ("robot_id", d.Id), ("collector_session_id", session), ("sequence", seq), ("sampled_at", at),
+        ("robot_id", d.Id), ("controller_ip", d.Ip), ("collector_session_id", session), ("sequence", seq), ("sampled_at", at),
         ("position_ok", s.Position.Ok), ("position_status_code", s.Position.Code), ("position_status_message", s.Position.Error),
         ("position_sampled_at", s.Position.Ok ? at : null), ("position_pulses", s.Position.Ok ? Axes(s.Pulses) : null),
         ("torque_ok", s.Torque.Ok), ("torque_status_code", s.Torque.Code), ("torque_status_message", s.Torque.Error),

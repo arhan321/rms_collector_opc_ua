@@ -1,0 +1,421 @@
+{
+  "schema_version": 1,
+  "namespace_uri": "urn:adm:rms:ymconnect:opcua",
+  "robots": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
+  ],
+  "tags_per_robot": 101,
+  "tags": [
+    {
+      "path": "RobotId",
+      "dataType": "Int4"
+    },
+    {
+      "path": "IpAddress",
+      "dataType": "String"
+    },
+    {
+      "path": "Group",
+      "dataType": "String"
+    },
+    {
+      "path": "Simulated",
+      "dataType": "Boolean"
+    },
+    {
+      "path": "Connected",
+      "dataType": "Boolean"
+    },
+    {
+      "path": "HasFreshTelemetry",
+      "dataType": "Boolean"
+    },
+    {
+      "path": "ConnectionMessage",
+      "dataType": "String"
+    },
+    {
+      "path": "Identity/RobotCode",
+      "dataType": "String"
+    },
+    {
+      "path": "Identity/Name",
+      "dataType": "String"
+    },
+    {
+      "path": "Identity/Model",
+      "dataType": "String"
+    },
+    {
+      "path": "Identity/ControllerModel",
+      "dataType": "String"
+    },
+    {
+      "path": "Identity/SerialNumber",
+      "dataType": "String"
+    },
+    {
+      "path": "Identity/LineName",
+      "dataType": "String"
+    },
+    {
+      "path": "Identity/StationName",
+      "dataType": "String"
+    },
+    {
+      "path": "Identity/Json",
+      "dataType": "String"
+    },
+    {
+      "path": "Identity/AxisCount",
+      "dataType": "Int4"
+    },
+    {
+      "path": "Identity/ReferenceHome/S",
+      "dataType": "Float8"
+    },
+    {
+      "path": "Identity/ReferenceHome/L",
+      "dataType": "Float8"
+    },
+    {
+      "path": "Identity/ReferenceHome/U",
+      "dataType": "Float8"
+    },
+    {
+      "path": "Identity/ReferenceHome/R",
+      "dataType": "Float8"
+    },
+    {
+      "path": "Identity/ReferenceHome/B",
+      "dataType": "Float8"
+    },
+    {
+      "path": "Identity/ReferenceHome/T",
+      "dataType": "Float8"
+    },
+    {
+      "path": "Telemetry/ReadOk",
+      "dataType": "Boolean"
+    },
+    {
+      "path": "Telemetry/SampledAtUtc",
+      "dataType": "DateTime"
+    },
+    {
+      "path": "Status/ReadOk",
+      "dataType": "Boolean"
+    },
+    {
+      "path": "Status/SampledAtUtc",
+      "dataType": "DateTime"
+    },
+    {
+      "path": "Job/ReadOk",
+      "dataType": "Boolean"
+    },
+    {
+      "path": "Job/SampledAtUtc",
+      "dataType": "DateTime"
+    },
+    {
+      "path": "Operating/ReadOk",
+      "dataType": "Boolean"
+    },
+    {
+      "path": "Operating/SampledAtUtc",
+      "dataType": "DateTime"
+    },
+    {
+      "path": "Alarms/ReadOk",
+      "dataType": "Boolean"
+    },
+    {
+      "path": "Alarms/SampledAtUtc",
+      "dataType": "DateTime"
+    },
+    {
+      "path": "IO/ReadOk",
+      "dataType": "Boolean"
+    },
+    {
+      "path": "IO/SampledAtUtc",
+      "dataType": "DateTime"
+    },
+    {
+      "path": "System/ReadOk",
+      "dataType": "Boolean"
+    },
+    {
+      "path": "System/SampledAtUtc",
+      "dataType": "DateTime"
+    },
+    {
+      "path": "Simulation/ReadOk",
+      "dataType": "Boolean"
+    },
+    {
+      "path": "Simulation/SampledAtUtc",
+      "dataType": "DateTime"
+    },
+    {
+      "path": "Telemetry/SessionId",
+      "dataType": "String"
+    },
+    {
+      "path": "Telemetry/Sequence",
+      "dataType": "Int8"
+    },
+    {
+      "path": "Telemetry/SnapshotJson",
+      "dataType": "String"
+    },
+    {
+      "path": "Telemetry/Torque/Unit",
+      "dataType": "String"
+    },
+    {
+      "path": "Telemetry/Torque/ReadOk",
+      "dataType": "Boolean"
+    },
+    {
+      "path": "Telemetry/Torque/StatusCode",
+      "dataType": "Int4"
+    },
+    {
+      "path": "Telemetry/Torque/S",
+      "dataType": "Float8"
+    },
+    {
+      "path": "Telemetry/Torque/L",
+      "dataType": "Float8"
+    },
+    {
+      "path": "Telemetry/Torque/U",
+      "dataType": "Float8"
+    },
+    {
+      "path": "Telemetry/Torque/R",
+      "dataType": "Float8"
+    },
+    {
+      "path": "Telemetry/Torque/B",
+      "dataType": "Float8"
+    },
+    {
+      "path": "Telemetry/Torque/T",
+      "dataType": "Float8"
+    },
+    {
+      "path": "Telemetry/Pulse/Unit",
+      "dataType": "String"
+    },
+    {
+      "path": "Telemetry/Pulse/ReadOk",
+      "dataType": "Boolean"
+    },
+    {
+      "path": "Telemetry/Pulse/StatusCode",
+      "dataType": "Int4"
+    },
+    {
+      "path": "Telemetry/Pulse/S",
+      "dataType": "Float8"
+    },
+    {
+      "path": "Telemetry/Pulse/L",
+      "dataType": "Float8"
+    },
+    {
+      "path": "Telemetry/Pulse/U",
+      "dataType": "Float8"
+    },
+    {
+      "path": "Telemetry/Pulse/R",
+      "dataType": "Float8"
+    },
+    {
+      "path": "Telemetry/Pulse/B",
+      "dataType": "Float8"
+    },
+    {
+      "path": "Telemetry/Pulse/T",
+      "dataType": "Float8"
+    },
+    {
+      "path": "Status/Running",
+      "dataType": "Boolean"
+    },
+    {
+      "path": "Status/ServoOn",
+      "dataType": "Boolean"
+    },
+    {
+      "path": "Status/Alarming",
+      "dataType": "Boolean"
+    },
+    {
+      "path": "Status/Hold",
+      "dataType": "Boolean"
+    },
+    {
+      "path": "Status/Error",
+      "dataType": "Boolean"
+    },
+    {
+      "path": "Status/ControlMode",
+      "dataType": "String"
+    },
+    {
+      "path": "Status/CycleMode",
+      "dataType": "String"
+    },
+    {
+      "path": "Job/Name",
+      "dataType": "String"
+    },
+    {
+      "path": "Job/Line",
+      "dataType": "Int4"
+    },
+    {
+      "path": "Job/Step",
+      "dataType": "Int4"
+    },
+    {
+      "path": "Job/SpeedOverridePercent",
+      "dataType": "Float8"
+    },
+    {
+      "path": "Job/ReadAtUtc",
+      "dataType": "DateTime"
+    },
+    {
+      "path": "Job/ReadStatus",
+      "dataType": "String"
+    },
+    {
+      "path": "Job/Task",
+      "dataType": "String"
+    },
+    {
+      "path": "Job/OemDiagnosisAvailable",
+      "dataType": "Boolean"
+    },
+    {
+      "path": "Operating/ControllerOnTime/Seconds",
+      "dataType": "Int8"
+    },
+    {
+      "path": "Operating/ControllerOnTime/Hours",
+      "dataType": "Float8"
+    },
+    {
+      "path": "Operating/ControllerOnTime/ReadOk",
+      "dataType": "Boolean"
+    },
+    {
+      "path": "Operating/ServoPowerOnTimeRobot/Seconds",
+      "dataType": "Int8"
+    },
+    {
+      "path": "Operating/ServoPowerOnTimeRobot/Hours",
+      "dataType": "Float8"
+    },
+    {
+      "path": "Operating/ServoPowerOnTimeRobot/ReadOk",
+      "dataType": "Boolean"
+    },
+    {
+      "path": "Operating/PlayBackTimeRobot/Seconds",
+      "dataType": "Int8"
+    },
+    {
+      "path": "Operating/PlayBackTimeRobot/Hours",
+      "dataType": "Float8"
+    },
+    {
+      "path": "Operating/PlayBackTimeRobot/ReadOk",
+      "dataType": "Boolean"
+    },
+    {
+      "path": "Operating/MovingTimeRobot/Seconds",
+      "dataType": "Int8"
+    },
+    {
+      "path": "Operating/MovingTimeRobot/Hours",
+      "dataType": "Float8"
+    },
+    {
+      "path": "Operating/MovingTimeRobot/ReadOk",
+      "dataType": "Boolean"
+    },
+    {
+      "path": "Alarms/ActiveCount",
+      "dataType": "Int4"
+    },
+    {
+      "path": "Alarms/ActiveJson",
+      "dataType": "String"
+    },
+    {
+      "path": "Alarms/HistoryJson",
+      "dataType": "String"
+    },
+    {
+      "path": "Alarms/HistoryReadOk",
+      "dataType": "Boolean"
+    },
+    {
+      "path": "IO/Json",
+      "dataType": "String"
+    },
+    {
+      "path": "IO/Byte10",
+      "dataType": "Int4"
+    },
+    {
+      "path": "IO/Byte10010",
+      "dataType": "Int4"
+    },
+    {
+      "path": "System/Json",
+      "dataType": "String"
+    },
+    {
+      "path": "Simulation/Phase",
+      "dataType": "String"
+    },
+    {
+      "path": "Simulation/HomeStatus",
+      "dataType": "String"
+    },
+    {
+      "path": "Simulation/Json",
+      "dataType": "String"
+    },
+    {
+      "path": "Simulation/CycleSecond",
+      "dataType": "Float8"
+    },
+    {
+      "path": "Simulation/CycleIndex",
+      "dataType": "Int8"
+    },
+    {
+      "path": "Simulation/CompletedDemoJobs",
+      "dataType": "Int8"
+    },
+    {
+      "path": "Simulation/CommunicationAvailable",
+      "dataType": "Boolean"
+    }
+  ]
+}
