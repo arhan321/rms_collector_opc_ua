@@ -16,7 +16,7 @@
   <ItemGroup>
     <PackageReference Include="OPCFoundation.NetStandard.Opc.Ua.Server" Version="1.5.378.196" />
     <PackageReference Include="OPCFoundation.NetStandard.Opc.Ua.Configuration" Version="1.5.378.196" />
-    <Compile Include="src-csharp/AssemblyInfo.cs;src-csharp/Configuration.cs;src-csharp/JobMonitorEvidence.cs;src-csharp/Models.cs;src-csharp/Program.cs;src-csharp/Readers.cs;src-csharp/YmConnectReader.cs" />
+    <Compile Include="src-csharp/AssemblyInfo.cs;src-csharp/Configuration.cs;src-csharp/JobMonitorEvidence.cs;src-csharp/Models.cs;src-csharp/Program.cs;src-csharp/Readers.cs;src-csharp/MockSimulation.cs;src-csharp/YmConnectReader.cs" />
     <Compile Include="opcua/OpcUaHost.cs;opcua/OpcUaSettings.cs;opcua/RmsNodeManager.cs" />
     <Reference Include="YMConnect_CS">
       <HintPath>sdk/dotnet/YMConnect_CS.dll</HintPath>
@@ -26,6 +26,7 @@
     <None Update="sdk/dotnet/LICENSE" Link="licenses/YMConnect-LICENSE" CopyToPublishDirectory="PreserveNewest" />
     <None Update="opcua/licenses/**" Link="licenses/%(Filename)%(Extension)" CopyToPublishDirectory="PreserveNewest" />
     <None Update="config/collector.opcua.conf;config/robots.opcua.conf" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Update="config/collector.mock8.conf;config/robots.mock8.conf;config/mock-robots.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Update="PANDUAN_IGNITION_OPCUA.md;RINGKASAN_PERUBAHAN_OPCUA.md" CopyToPublishDirectory="PreserveNewest" />
     <None Update="deploy/windows/*OPCUA.cmd;deploy/windows/CHECK_SDK.cmd;deploy/windows/TEST_MOCK.cmd;deploy/windows/MULAI_DI_SINI.txt" Link="%(Filename)%(Extension)" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
