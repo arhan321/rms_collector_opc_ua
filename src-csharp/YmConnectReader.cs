@@ -52,25 +52,25 @@ internal sealed class YmConnectReader(Device device, bool jobEverySample = false
     }
     public void Dispose() => Disconnect();
     private static Reading Result(StatusInfo status, string failure, string raw = "") =>
-        new(status.StatusCode == 0, status.StatusCode, status.StatusCode == 0 ? "" : failure, status.StatusCode == 0 ? raw : "");
+        new(status.StatusCode == 0, status.StatusCode, status.StatusCode == 0 ? "" : failure, status.StatusCode == 0 ? raw : "", DateTime.UtcNow);
 
     public RobotSample Collect(long sequence, bool extras, bool operating, bool alarms)
     {
         var c = controller ?? throw new InvalidOperationException("Not connected to robot");
-        var s = new RobotSample();
+        var s = new RobotSample { CollectionStartedAtUtc = DateTime.UtcNow };
         var ps = c.ControlGroup.ReadPositionData(ControlGroupId.R1, CoordinateType.Pulse, 0, 0, out PositionData position);
         s.Position = Result(ps, "YMConnect position read failed");
         if (s.Position.Ok)
         {
             if (position.AxisData is not { Length: >= 6 } || position.AxisData.Take(6).Any(v => !double.IsFinite(v)))
-                s.Position = new(false, -1, "Invalid position axis data from SDK");
+                s.Position = s.Position with { Ok = false, Code = -1, Error = "Invalid position axis data from SDK" };
             else s.Pulses = position.AxisData.Take(6).ToArray();
         }
         var ts = c.ControlGroup.ReadTorqueData(ControlGroupId.R1, out TorqueData torque);
         s.Torque = Result(ts, "YMConnect torque read failed");
         if (s.Torque.Ok)
         {
-            if (torque.AxisData is not { Length: >= 6 }) s.Torque = new(false, -1, "Invalid torque axis data from SDK");
+            if (torque.AxisData is not { Length: >= 6 }) s.Torque = s.Torque with { Ok = false, Code = -1, Error = "Invalid torque axis data from SDK" };
             else s.Torques = torque.AxisData.Take(6).Select(v => (double)v).ToArray();
         }
         // Keep the job observation close to the torque read. These are separate SDK calls.
@@ -90,6 +90,7 @@ internal sealed class YmConnectReader(Device device, bool jobEverySample = false
         if (operating) ReadOperating(c, s);
         if (alarms) ReadAlarms(c, s);
         if (extras) ReadExtras(c, s);
+        s.CollectionCompletedAtUtc = DateTime.UtcNow;
         return s;
     }
 
@@ -106,12 +107,12 @@ internal sealed class YmConnectReader(Device device, bool jobEverySample = false
                     ("speed_override_percent", job.SpeedOverride), ("task", "Master"));
             }
         }
-        catch (Exception exception)
+        catch (Exception exception) when (OpcUaRunner.IsRecoverable(exception))
         {
-            s.Job = new(false, -1, $"YMConnect job read failed ({exception.GetType().Name})");
+            s.Job = new(false, -1, $"YMConnect job read failed ({exception.GetType().Name})", SampledAtUtc: DateTime.UtcNow);
             s.JobData = null;
         }
-        finally { s.JobReadAt = SampleJson.Timestamp(); }
+        finally { s.JobReadAt = (s.Job.SampledAtUtc ?? DateTime.UtcNow).ToString("O", CultureInfo.InvariantCulture); }
     }
 
     private static void ReadOperating(MotomanController c, RobotSample s)
@@ -124,7 +125,7 @@ internal sealed class YmConnectReader(Device device, bool jobEverySample = false
             if (result.Ok)
             {
                 var elapsed = data.ElapsedTime;
-                if (elapsed.Minutes >= 60 || elapsed.Seconds >= 60) result = new(false, -1, "YMConnect elapsed time components are out of range");
+                if (elapsed.Minutes >= 60 || elapsed.Seconds >= 60) result = result with { Ok = false, Code = -1, Error = "YMConnect elapsed time components are out of range" };
                 else
                 {
                     seconds = checked((long)elapsed.Hours * 3600 + elapsed.Minutes * 60L + elapsed.Seconds);
@@ -146,7 +147,7 @@ internal sealed class YmConnectReader(Device device, bool jobEverySample = false
         if (s.Alarm.Ok)
         {
             if (active.Count < 0 || active.Count > (active.Alarms?.Length ?? 0))
-                s.Alarm = new(false, -1, "Invalid active alarm count from SDK");
+                s.Alarm = s.Alarm with { Ok = false, Code = -1, Error = "Invalid active alarm count from SDK" };
             else
             {
                 s.ActiveAlarmCount = active.Count;
@@ -172,7 +173,7 @@ internal sealed class YmConnectReader(Device device, bool jobEverySample = false
         }
         s.AlarmHistoryData = SampleJson.Map(("requested_per_category", 20), ("categories", categories));
         s.AlarmHistory = new(allOk, allOk ? 0 : -1, allOk ? "" : anyOk ? "Some alarm history categories failed" : "All alarm history category reads failed",
-            SampleJson.Json(s.AlarmHistoryData));
+            SampleJson.Json(s.AlarmHistoryData), DateTime.UtcNow);
     }
 
     private void ReadExtras(MotomanController c, RobotSample s)
@@ -182,11 +183,12 @@ internal sealed class YmConnectReader(Device device, bool jobEverySample = false
         {
             var status = c.Status.ReadSystemInformation(id, out SystemInfoData data);
             bool ok = status.StatusCode == 0;
-            info[name] = SampleJson.Map(("read_ok", ok), ("status_code", status.StatusCode),
+            info[name] = SampleJson.Map(("read_ok", ok), ("status_code", status.StatusCode), ("sampled_at", DateTime.UtcNow),
                 ("model_name", ok ? SampleJson.Text(data.ModelName) : null), ("software_version", ok ? SampleJson.Text(data.SoftwareVersion) : null));
         }
         s.SystemInfoData = info;
-        if (device.Io.Length == 0) { s.Io = new(false, -1, "No IO addresses configured"); return; }
+        s.SystemReadAtUtc = DateTime.UtcNow;
+        if (device.Io.Length == 0) { s.Io = new(false, -1, "No IO addresses configured", SampledAtUtc: DateTime.UtcNow); return; }
         var values = new Dictionary<string, object?>();
         bool allOk = true;
         foreach (int address in device.Io)
@@ -194,10 +196,10 @@ internal sealed class YmConnectReader(Device device, bool jobEverySample = false
             var status = c.IO.ReadByte((uint)address, out IOByteData value);
             bool ok = status.StatusCode == 0;
             allOk &= ok;
-            values[address.ToString(CultureInfo.InvariantCulture)] = SampleJson.Map(("read_ok", ok), ("status_code", status.StatusCode),
+            values[address.ToString(CultureInfo.InvariantCulture)] = SampleJson.Map(("read_ok", ok), ("status_code", status.StatusCode), ("sampled_at", DateTime.UtcNow),
                 ("sdk_raw_text", ok ? Convert.ToString(value.ToByte(), 2).PadLeft(8, '0') : null));
         }
         s.IoData = values;
-        s.Io = new(allOk, allOk ? 0 : -1, allOk ? "" : "Some IO address reads failed", SampleJson.Json(values));
+        s.Io = new(allOk, allOk ? 0 : -1, allOk ? "" : "Some IO address reads failed", SampleJson.Json(values), DateTime.UtcNow);
     }
 }

@@ -9,7 +9,7 @@ internal static class AppLog
     public static void Write(string text) { lock (Sync) Console.WriteLine(text); }
 }
 
-internal static class OpcUaProgram
+public static class OpcUaProgram
 {
     public static async Task<int> Main(string[] args)
     {
@@ -76,51 +76,98 @@ internal static class OpcUaProgram
 
 internal static class OpcUaRunner
 {
+    internal static bool IsRecoverable(Exception error) => error is IOException or TimeoutException
+        or InvalidOperationException or System.Net.Sockets.SocketException
+        or System.Runtime.InteropServices.ExternalException;
+
+    private static void CloseReader(IRobotReader reader, Device device, bool dispose = false)
+    {
+        try { if (dispose) reader.Dispose(); else reader.Disconnect(); }
+        catch (Exception error) when (IsRecoverable(error))
+        {
+            AppLog.Write($"[ROBOT id={device.Id} ip={device.Ip}] cleanup failed: {error.GetType().Name}: {error.Message}");
+        }
+    }
+
     public static async Task RunAsync(CollectorConfig config, Device device, RmsNodeManager nodes, bool mock,
         CancellationToken cancellation, Func<IRobotReader>? factory = null)
     {
-        using var reader = factory?.Invoke() ?? (mock ? (IRobotReader)new MockReader(device, config.JobEverySample, config.TelemetryMs) : new YmConnectReader(device, config.JobEverySample));
+        var reader = factory?.Invoke() ?? (mock ? (IRobotReader)new MockReader(device, config.JobEverySample, config.TelemetryMs) : new YmConnectReader(device, config.JobEverySample));
         string session = Guid.NewGuid().ToString();
         long sequence = 0;
-        int badReads = 0;
+        int badReads = 0, retryAttempt = 0;
         string? lastSimulationPhase = null;
         var clock = Stopwatch.StartNew();
         TimeSpan nextOperating = TimeSpan.Zero, nextAlarms = TimeSpan.Zero, nextExtras = TimeSpan.Zero;
+        async Task Retry(string reason)
+        {
+            nodes.Disconnect(device.Id, reason);
+            CloseReader(reader, device);
+            badReads = 0;
+            nextOperating = nextAlarms = nextExtras = TimeSpan.Zero;
+            double milliseconds = Math.Min(30000, Math.Min(config.TelemetryMs, 5000) * Math.Pow(2, Math.Min(retryAttempt++, 5)));
+            AppLog.Write($"[ROBOT id={device.Id} ip={device.Ip}] {reason}; reconnect in {milliseconds / 1000:0.#}s");
+            await Task.Delay(TimeSpan.FromMilliseconds(milliseconds), cancellation);
+        }
         try
         {
             while (!cancellation.IsCancellationRequested)
             {
                 TimeSpan start = clock.Elapsed;
-                if (!reader.Connected && !reader.Connect())
+                RobotSample sample;
+                bool operating, alarms, extras;
+                // Only connection/reader failures are recoverable here. Publisher and
+                // configuration/invariant errors remain fatal and visible to the host.
+                try
                 {
-                    nodes.Disconnect(device.Id, "YMConnect connection failed");
+                    if (!reader.Connected)
+                    {
+                        if (!reader.Connect())
+                        {
+                            await Retry("Robot connection failed");
+                            continue;
+                        }
+                        nextOperating = nextAlarms = nextExtras = TimeSpan.Zero;
+                    }
+                    operating = start >= nextOperating;
+                    alarms = start >= nextAlarms;
+                    extras = start >= nextExtras;
+                    sample = reader.Collect(sequence, extras, operating, alarms);
                 }
-                else
+                catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { break; }
+                catch (Exception error) when (IsRecoverable(error))
                 {
-                    bool operating = start >= nextOperating, alarms = start >= nextAlarms, extras = start >= nextExtras;
-                    var sample = reader.Collect(sequence, extras, operating, alarms);
-                    if (mock && sample.Simulation is { } simulation && simulation.Phase != lastSimulationPhase)
-                    {
-                        AppLog.Write($"[SIM robot={device.Id} ip={device.Ip}] phase={simulation.Phase} home={simulation.HomeStatus}");
-                        lastSimulationPhase = simulation.Phase;
-                    }
-                    nodes.Publish(device, sample, session, sequence++, DateTime.UtcNow, operating, alarms, extras);
-                    if (sample.Position.Ok || sample.Torque.Ok) badReads = 0;
-                    else if (++badReads >= 3)
-                    {
-                        nodes.Disconnect(device.Id, "Three consecutive telemetry failures");
-                        reader.Disconnect();
-                        badReads = 0;
-                    }
-                    if (operating) nextOperating = start + TimeSpan.FromSeconds(config.OperatingSeconds);
-                    if (alarms) nextAlarms = start + TimeSpan.FromSeconds(config.AlarmSeconds);
-                    if (extras) nextExtras = start + TimeSpan.FromSeconds(config.ExtrasSeconds);
+                    await Retry($"Reader failure ({error.GetType().Name}): {error.Message}");
+                    continue;
                 }
+                if (mock && sample.Simulation is { } simulation && simulation.Phase != lastSimulationPhase)
+                {
+                    AppLog.Write($"[SIM robot={device.Id} ip={device.Ip}] phase={simulation.Phase} home={simulation.HomeStatus}");
+                    lastSimulationPhase = simulation.Phase;
+                }
+                nodes.Publish(device, sample, session, sequence++, DateTime.UtcNow, operating, alarms, extras);
+                if (sample.Position.Ok || sample.Torque.Ok)
+                {
+                    badReads = 0;
+                    retryAttempt = 0;
+                }
+                else if (++badReads >= 3)
+                {
+                    await Retry("Three consecutive telemetry failures");
+                    continue;
+                }
+                if (operating) nextOperating = start + TimeSpan.FromSeconds(config.OperatingSeconds);
+                if (alarms) nextAlarms = start + TimeSpan.FromSeconds(config.AlarmSeconds);
+                if (extras) nextExtras = start + TimeSpan.FromSeconds(config.ExtrasSeconds);
                 TimeSpan delay = start + TimeSpan.FromMilliseconds(config.TelemetryMs) - clock.Elapsed;
                 if (delay > TimeSpan.Zero) await Task.Delay(delay, cancellation);
             }
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
-        finally { nodes.Disconnect(device.Id, "Collector stopped"); }
+        finally
+        {
+            nodes.Disconnect(device.Id, "Collector stopped");
+            CloseReader(reader, device, dispose: true);
+        }
     }
 }

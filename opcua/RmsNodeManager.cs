@@ -195,11 +195,15 @@ internal sealed class RmsNodeManager : CustomNodeManager2
         Set(path + "/SampledAtUtc", at, StatusCodes.Good, at);
     }
 
+    private static DateTime Stamp(DateTime? readAt, DateTime fallback) => (readAt ?? fallback).ToUniversalTime();
+
     public void Publish(Device device, RobotSample sample, string session, long sequence, DateTime at, bool operating, bool alarms, bool extras)
     {
         lock (Lock)
         {
             string p = $"RMS/Robots/{device.Id}";
+            DateTime pulseAt = Stamp(sample.Position.SampledAtUtc, at), torqueAt = Stamp(sample.Torque.SampledAtUtc, at);
+            DateTime stateAt = Stamp(sample.State.SampledAtUtc, at);
             bool communicating = sample.Simulation?.CommunicationAvailable ?? true;
             Set(p + "/Connected", communicating, StatusCodes.Good, at);
             Set(p + "/ConnectionMessage", mock ? "SIMULATED: " + (sample.Simulation?.Phase ?? "data") : "YMConnect connected", StatusCodes.Good, at);
@@ -216,30 +220,30 @@ internal sealed class RmsNodeManager : CustomNodeManager2
             }
             bool torqueOk = sample.Torque.Ok && sample.Torques.Length >= 6 && sample.Torques.Take(6).All(double.IsFinite);
             bool pulseOk = sample.Position.Ok && sample.Pulses.Length >= 6 && sample.Pulses.Take(6).All(double.IsFinite);
-            Mark(device.Id, "Telemetry", at, torqueOk || pulseOk);
+            Mark(device.Id, "Telemetry", pulseAt > torqueAt ? pulseAt : torqueAt, torqueOk || pulseOk);
             Set(p + "/HasFreshTelemetry", torqueOk || pulseOk, StatusCodes.Good, at);
-            foreach (var (name, read, valid) in new[] { ("Pulse", sample.Position, pulseOk), ("Torque", sample.Torque, torqueOk) })
+            foreach (var (name, read, valid, readAt) in new[] { ("Pulse", sample.Position, pulseOk, pulseAt), ("Torque", sample.Torque, torqueOk, torqueAt) })
             {
-                Set(p + "/Telemetry/" + name + "/ReadOk", valid, StatusCodes.Good, at);
-                Set(p + "/Telemetry/" + name + "/StatusCode", read.Code, StatusCodes.Good, at);
+                Set(p + "/Telemetry/" + name + "/ReadOk", valid, StatusCodes.Good, readAt);
+                Set(p + "/Telemetry/" + name + "/StatusCode", read.Code, StatusCodes.Good, readAt);
             }
             for (int i = 0; i < Axes.Length; i++)
             {
-                Set(p + "/Telemetry/Torque/" + Axes[i], torqueOk ? sample.Torques[i] : null, Quality(torqueOk), at);
-                Set(p + "/Telemetry/Pulse/" + Axes[i], pulseOk ? sample.Pulses[i] : null, Quality(pulseOk), at);
+                Set(p + "/Telemetry/Torque/" + Axes[i], torqueOk ? sample.Torques[i] : null, Quality(torqueOk), torqueAt);
+                Set(p + "/Telemetry/Pulse/" + Axes[i], pulseOk ? sample.Pulses[i] : null, Quality(pulseOk), pulseAt);
             }
-            // One self-contained snapshot for consumers needing coherent identity/axes/status.
+            // Self-contained representation; independent SDK reads are not atomic.
             if (torqueOk == sample.Torque.Ok && pulseOk == sample.Position.Ok)
                 Set(p + "/Telemetry/SnapshotJson", SampleJson.Snapshot(device, session, sequence, at.ToString("O"), sample, mock), Quality(torqueOk || pulseOk), at);
             else Set(p + "/Telemetry/SnapshotJson", null, StatusCodes.BadDecodingError, at);
             Set(p + "/Telemetry/SessionId", session, StatusCodes.Good, at);
             Set(p + "/Telemetry/Sequence", sequence, StatusCodes.Good, at);
-            Mark(device.Id, "Status", at, sample.State.Ok);
+            Mark(device.Id, "Status", stateAt, sample.State.Ok);
             var state = JsonSerializer.SerializeToElement(sample.StateData);
             foreach (var (tag, key) in new[] { ("Running", "running"), ("ServoOn", "servo_on"), ("Alarming", "alarm"), ("Hold", "hold"), ("Error", "error") })
-                Set(p + "/Status/" + tag, sample.State.Ok ? Bool(state, key) : null, Quality(sample.State.Ok && Bool(state, key) is not null), at);
+                Set(p + "/Status/" + tag, sample.State.Ok ? Bool(state, key) : null, Quality(sample.State.Ok && Bool(state, key) is not null), stateAt);
             foreach (var (tag, key) in new[] { ("ControlMode", "control_mode"), ("CycleMode", "cycle_mode") })
-                Set(p + "/Status/" + tag, sample.State.Ok ? Text(state, key) : null, Quality(sample.State.Ok && Text(state, key) is not null), at);
+                Set(p + "/Status/" + tag, sample.State.Ok ? Text(state, key) : null, Quality(sample.State.Ok && Text(state, key) is not null), stateAt);
 
             if (sample.JobReadAt is not null)
             {
@@ -256,40 +260,48 @@ internal sealed class RmsNodeManager : CustomNodeManager2
             }
             if (operating)
             {
-                Mark(device.Id, "Operating", at, sample.OperatingReadings.Count > 0 && sample.OperatingReadings.All(r => r.Result.Ok));
+                DateTime latest = sample.OperatingReadings.Select(r => Stamp(r.Result.SampledAtUtc, at)).DefaultIfEmpty(at).Max();
+                Mark(device.Id, "Operating", latest, sample.OperatingReadings.Count == Counters.Length && sample.OperatingReadings.All(r => r.Result.Ok));
                 foreach (string type in Counters)
                 {
                     var counter = sample.OperatingReadings.FirstOrDefault(r => r.Type == type);
                     bool ok = counter?.Result.Ok == true && counter.Seconds is >= 0;
+                    DateTime readAt = Stamp(counter?.Result.SampledAtUtc, at);
                     string path = p + "/Operating/" + type;
-                    Set(path + "/ReadOk", ok, StatusCodes.Good, at);
-                    Set(path + "/Seconds", ok ? counter!.Seconds : null, Quality(ok), at);
-                    Set(path + "/Hours", ok ? counter!.Seconds / 3600d : null, Quality(ok), at);
+                    Set(path + "/ReadOk", ok, StatusCodes.Good, readAt);
+                    Set(path + "/Seconds", ok ? counter!.Seconds : null, Quality(ok), readAt);
+                    Set(path + "/Hours", ok ? counter!.Seconds / 3600d : null, Quality(ok), readAt);
                 }
             }
             if (alarms)
             {
-                Mark(device.Id, "Alarms", at, sample.Alarm.Ok);
-                Set(p + "/Alarms/ActiveCount", sample.Alarm.Ok ? sample.ActiveAlarmCount : null, Quality(sample.Alarm.Ok && sample.ActiveAlarmCount is not null), at);
-                Set(p + "/Alarms/ActiveJson", sample.Alarm.Ok ? SampleJson.Json(sample.ActiveAlarms) : null, Quality(sample.Alarm.Ok), at);
-                Set(p + "/Alarms/HistoryReadOk", sample.AlarmHistory.Ok, StatusCodes.Good, at);
-                Set(p + "/Alarms/HistoryJson", sample.AlarmHistoryData is null ? null : SampleJson.Json(sample.AlarmHistoryData), Quality(sample.AlarmHistory.Ok), at);
+                DateTime activeAt = Stamp(sample.Alarm.SampledAtUtc, at), historyAt = Stamp(sample.AlarmHistory.SampledAtUtc, at);
+                Mark(device.Id, "Alarms", activeAt, sample.Alarm.Ok);
+                Set(p + "/Alarms/ActiveCount", sample.Alarm.Ok ? sample.ActiveAlarmCount : null, Quality(sample.Alarm.Ok && sample.ActiveAlarmCount is not null), activeAt);
+                Set(p + "/Alarms/ActiveJson", sample.Alarm.Ok ? SampleJson.Json(sample.ActiveAlarms) : null, Quality(sample.Alarm.Ok), activeAt);
+                Set(p + "/Alarms/HistoryReadOk", sample.AlarmHistory.Ok, StatusCodes.Good, historyAt);
+                Set(p + "/Alarms/HistoryJson", sample.AlarmHistoryData is null ? null : SampleJson.Json(sample.AlarmHistoryData), Quality(sample.AlarmHistory.Ok), historyAt);
             }
             if (extras)
             {
-                Mark(device.Id, "IO", at, sample.Io.Ok);
-                Set(p + "/IO/Json", sample.IoData is null ? null : SampleJson.Json(sample.IoData), Quality(sample.Io.Ok), at);
+                DateTime ioAt = Stamp(sample.Io.SampledAtUtc, at), systemAt = Stamp(sample.SystemReadAtUtc, at);
+                Mark(device.Id, "IO", ioAt, sample.Io.Ok);
+                Set(p + "/IO/Json", sample.IoData is null ? null : SampleJson.Json(sample.IoData), Quality(sample.Io.Ok), ioAt);
                 var io = JsonSerializer.SerializeToElement(sample.IoData);
                 foreach (int address in device.Io)
                 {
                     int? value = IoByte(io, address);
-                    Set(p + "/IO/Byte" + address, value, Quality(value.HasValue), at);
+                    DateTime readAt = DateTime.TryParse(Text(Get(io, address.ToString(CultureInfo.InvariantCulture)), "sampled_at"), CultureInfo.InvariantCulture,
+                        DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var valueAt) ? valueAt : ioAt;
+                    Set(p + "/IO/Byte" + address, value, Quality(value.HasValue), readAt);
                 }
                 var system = JsonSerializer.SerializeToElement(sample.SystemInfoData);
                 bool systemOk = mock ? sample.SystemInfoData is not null : Bool(Get(system, "robot_r1"), "read_ok") == true;
-                Mark(device.Id, "System", at, systemOk);
-                Set(p + "/System/Json", sample.SystemInfoData is null ? null : SampleJson.Json(sample.SystemInfoData), Quality(systemOk), at);
+                Mark(device.Id, "System", systemAt, systemOk);
+                Set(p + "/System/Json", sample.SystemInfoData is null ? null : SampleJson.Json(sample.SystemInfoData), Quality(systemOk), systemAt);
             }
+            // A slow auxiliary call must not make earlier axis reads look fresh.
+            Expire(DateTime.UtcNow);
         }
     }
 
@@ -311,24 +323,50 @@ internal sealed class RmsNodeManager : CustomNodeManager2
         {
             foreach (var (key, at) in observed)
             {
-                if (now - at <= TimeSpan.FromSeconds(ttls[key.Stream])) continue;
-                Invalidate($"RMS/Robots/{key.Robot}/{key.Stream}/", StatusCodes.BadNoCommunication);
-                if (key.Stream == "Telemetry")
+                string prefix = $"RMS/Robots/{key.Robot}/{key.Stream}/";
+                foreach (var (path, variable) in values)
                 {
-                    Set($"RMS/Robots/{key.Robot}/HasFreshTelemetry", false, StatusCodes.Good, now);
-                    Set($"RMS/Robots/{key.Robot}/Connected", false, StatusCodes.Good, now);
-                    Set($"RMS/Robots/{key.Robot}/ConnectionMessage", "Telemetry stale", StatusCodes.Good, now);
+                    if (!path.StartsWith(prefix, StringComparison.Ordinal) || IsConstant(path)) continue;
+                    if (now - variable.Timestamp <= TimeSpan.FromSeconds(ttls[key.Stream]) ||
+                        StatusCode.IsBad(variable.StatusCode)) continue;
+                    variable.StatusCode = StatusCodes.BadNoCommunication;
+                    variable.ClearChangeMasks(SystemContext, false);
+                }
+            }
+            foreach (var device in config.Devices)
+            {
+                if (!observed.ContainsKey((device.Id, "Telemetry"))) continue;
+                string p = $"RMS/Robots/{device.Id}/";
+                var pulse = values[p + "Telemetry/Pulse/S"];
+                var torque = values[p + "Telemetry/Torque/S"];
+                bool fresh = !StatusCode.IsBad(pulse.StatusCode) || !StatusCode.IsBad(torque.StatusCode);
+                if (!Equals(values[p + "HasFreshTelemetry"].Value, fresh))
+                    Set(p + "HasFreshTelemetry", fresh, StatusCodes.Good, now);
+                if (!fresh && Equals(values[p + "Connected"].Value, true))
+                {
+                    Set(p + "Connected", false, StatusCodes.Good, now);
+                    Set(p + "ConnectionMessage", "Telemetry stale or unavailable", StatusCodes.Good, now);
+                }
+                var snapshot = values[p + "Telemetry/SnapshotJson"];
+                bool staleAxis = now - pulse.Timestamp > TimeSpan.FromSeconds(ttls["Telemetry"]) ||
+                    now - torque.Timestamp > TimeSpan.FromSeconds(ttls["Telemetry"]);
+                if ((!fresh || staleAxis) && !StatusCode.IsBad(snapshot.StatusCode))
+                {
+                    snapshot.StatusCode = StatusCodes.BadNoCommunication;
+                    snapshot.ClearChangeMasks(SystemContext, false);
                 }
             }
         }
     }
 
+    private static bool IsConstant(string path) => path.EndsWith("/Unit", StringComparison.Ordinal) ||
+        path.EndsWith("/Task", StringComparison.Ordinal) || path.EndsWith("/OemDiagnosisAvailable", StringComparison.Ordinal);
+
     private void Invalidate(string prefix, uint quality)
     {
         foreach (var (path, variable) in values)
         {
-            if (!path.StartsWith(prefix, StringComparison.Ordinal) || path.EndsWith("/Unit", StringComparison.Ordinal) ||
-                path.EndsWith("/Task", StringComparison.Ordinal) || path.EndsWith("/OemDiagnosisAvailable", StringComparison.Ordinal)) continue;
+            if (!path.StartsWith(prefix, StringComparison.Ordinal) || IsConstant(path)) continue;
             // Keep the old source timestamp so old data cannot look newly sampled.
             variable.StatusCode = quality;
             variable.ClearChangeMasks(SystemContext, false);

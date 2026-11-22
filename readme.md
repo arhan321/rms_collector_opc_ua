@@ -18,9 +18,9 @@ Panduan lengkap: [PANDUAN_IGNITION_OPCUA.md](PANDUAN_IGNITION_OPCUA.md). Jika me
 ## Build dan tes dari root
 
 ```bat
-dotnet build RmsCollector.csproj -c Release
-dotnet run --project RmsCollector.csproj -- --mock
-dotnet run --project tests-opcua\RmsCollector.OpcUa.Tests.csproj
+dotnet build .\RmsCollector.csproj -c Release
+dotnet run --project .\tests-opcua\RmsCollector.OpcUa.Tests.csproj -c Release
+dotnet run --project .\RmsCollector.csproj -c Release -- --config .\config\collector.mock8.conf --mock
 ```
 
 ### jika mau running production
@@ -32,9 +32,13 @@ Build aplikasinya:
 ```
 dotnet build .\RmsCollector.csproj -c Release
 ```
+cek apakah YMConnect bisa dimuat : 
+```
+.\bin\Release\net10.0\rms_collector_opcua.exe --check-sdk
+```
 Jalankan pembacaan robot aktual:
 ```
-.\bin\Release\net10.0\rms_collector_opcua.exe --config .\config\collector.opcua.conf --real
+dotnet run --project .\RmsCollector.csproj -c Release -- --config .\config\collector.opcua.conf --real
 ```
 
 

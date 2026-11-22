@@ -125,7 +125,7 @@ internal static class Program
             host.Nodes.Publish(robots.Devices[0], sample, "test-session", 1, sampled, true, true, true);
             var torque = await Read("Telemetry/Torque/S");
             Check(torque.StatusCode == StatusCodes.UncertainSubstituteValue && Math.Abs((double)torque.Value - sample.Torques[0]) < 1e-8, "axis value is correct and mock quality is Uncertain");
-            Check(Math.Abs((torque.SourceTimestamp - sampled).TotalMilliseconds) < 1, "OPC source timestamp preserves collector sample time");
+            Check(Math.Abs((torque.SourceTimestamp - sample.Torque.SampledAtUtc!.Value).TotalMilliseconds) < 1, "OPC source timestamp preserves the individual torque read time");
             Check((string)(await Read("Job/Name")).Value == "MASTER", "job identity is available as an OPC tag");
             Check((long)(await Read("Operating/MovingTimeRobot/Seconds")).Value == sample.OperatingReadings.Single(r => r.Type == "MovingTimeRobot").Seconds, "operating counter preserves seconds");
             Check((int)(await Read("IO/Byte10")).Value == 16, "nested I/O byte payload is mapped without changing its value");
@@ -188,7 +188,9 @@ internal static class Program
             host.Nodes.Publish(robots.Devices[0], malformed, "test-session", 3, DateTime.UtcNow, false, false, false);
             Check(StatusCode.IsBad((await Read("Telemetry/Torque/S")).StatusCode) && (await Read("Telemetry/SnapshotJson")).StatusCode == StatusCodes.BadDecodingError,
                 "non-finite SDK values cannot be published as valid torque or JSON");
-            host.Nodes.Publish(robots.Devices[0], reader.Collect(4, true, true, true), "test-session", 4, sampled = DateTime.UtcNow, true, true, true);
+            var staleSample = reader.Collect(4, true, true, true);
+            sampled = staleSample.Torque.SampledAtUtc!.Value;
+            host.Nodes.Publish(robots.Devices[0], staleSample, "test-session", 4, DateTime.UtcNow, true, true, true);
             host.Nodes.Expire(sampled.AddSeconds(60));
             var stale = await Read("Telemetry/Torque/S");
             Check(StatusCode.IsBad(stale.StatusCode) && Math.Abs((stale.SourceTimestamp - sampled).TotalMilliseconds) < 1, "stale values are Bad without advancing their source timestamp");
@@ -209,6 +211,7 @@ internal static class Program
             }
             host.Nodes.Disconnect(1, "test disconnect");
             Check(!(bool)(await Read("Connected")).Value && StatusCode.IsBad((await Read("Job/Name")).StatusCode), "disconnect invalidates robot data");
+            await RecoveryChecks.Run(Check, robots, host.Nodes, Read);
             await session.CloseAsync(CancellationToken.None);
             Console.WriteLine($"SUCCESS: {checks} OPC UA integration checks");
             return 0;

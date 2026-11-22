@@ -2,25 +2,6 @@
   "version": 1,
   "dependencies": {
     "net10.0": {
-      "OPCFoundation.NetStandard.Opc.Ua.Configuration": {
-        "type": "Direct",
-        "requested": "[1.5.378.196, )",
-        "resolved": "1.5.378.196",
-        "contentHash": "PVxTU6h6tkzqu0Rrg3REmXnli23vtlPhpg9aNt7W6ND09bF5uE1nag4mVGA4/ZgtEfo+uzGj9gGtx9ZThtALMg==",
-        "dependencies": {
-          "OPCFoundation.NetStandard.Opc.Ua.Core": "1.5.378.196"
-        }
-      },
-      "OPCFoundation.NetStandard.Opc.Ua.Server": {
-        "type": "Direct",
-        "requested": "[1.5.378.196, )",
-        "resolved": "1.5.378.196",
-        "contentHash": "nmVQeQuRYV2xvooeo8DKbLst2UJKty43GFwuL/yXop+Jv0POPN+juo67T2/FNjrVDwlzLL8U1OxZyR/86T/nmw==",
-        "dependencies": {
-          "OPCFoundation.NetStandard.Opc.Ua.Configuration": "1.5.378.196",
-          "OPCFoundation.NetStandard.Opc.Ua.Core": "1.5.378.196"
-        }
-      },
       "Microsoft.Extensions.DependencyInjection": {
         "type": "Transitive",
         "resolved": "10.0.8",
@@ -71,6 +52,14 @@
         "resolved": "13.0.4",
         "contentHash": "pdgNNMai3zv51W5aq268sujXUyx7SNdE2bj1wZcWjAQrKMFZV260lbqYop1d2GM67JI1huLRwxo9ZqnfF/lC6A=="
       },
+      "OPCFoundation.NetStandard.Opc.Ua.Configuration": {
+        "type": "Transitive",
+        "resolved": "1.5.378.196",
+        "contentHash": "PVxTU6h6tkzqu0Rrg3REmXnli23vtlPhpg9aNt7W6ND09bF5uE1nag4mVGA4/ZgtEfo+uzGj9gGtx9ZThtALMg==",
+        "dependencies": {
+          "OPCFoundation.NetStandard.Opc.Ua.Core": "1.5.378.196"
+        }
+      },
       "OPCFoundation.NetStandard.Opc.Ua.Core": {
         "type": "Transitive",
         "resolved": "1.5.378.196",
@@ -90,6 +79,15 @@
           "OPCFoundation.NetStandard.Opc.Ua.Types": "1.5.378.196"
         }
       },
+      "OPCFoundation.NetStandard.Opc.Ua.Server": {
+        "type": "Transitive",
+        "resolved": "1.5.378.196",
+        "contentHash": "nmVQeQuRYV2xvooeo8DKbLst2UJKty43GFwuL/yXop+Jv0POPN+juo67T2/FNjrVDwlzLL8U1OxZyR/86T/nmw==",
+        "dependencies": {
+          "OPCFoundation.NetStandard.Opc.Ua.Configuration": "1.5.378.196",
+          "OPCFoundation.NetStandard.Opc.Ua.Core": "1.5.378.196"
+        }
+      },
       "OPCFoundation.NetStandard.Opc.Ua.Types": {
         "type": "Transitive",
         "resolved": "1.5.378.196",
@@ -97,8 +95,14 @@
         "dependencies": {
           "Microsoft.Extensions.Logging.Abstractions": "10.0.8"
         }
+      },
+      "rms_collector_opcua": {
+        "type": "Project",
+        "dependencies": {
+          "OPCFoundation.NetStandard.Opc.Ua.Configuration": "[1.5.378.196, )",
+          "OPCFoundation.NetStandard.Opc.Ua.Server": "[1.5.378.196, )"
+        }
       }
-    },
-    "net10.0/win-x64": {}
+    }
   }
 }

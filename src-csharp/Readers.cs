@@ -34,6 +34,7 @@ internal sealed class MockReader : IRobotReader
     public RobotSample Collect(long sequence, bool extras, bool operating, bool alarms)
     {
         if (sequence < 0) throw new ArgumentOutOfRangeException(nameof(sequence));
+        DateTime sampledAt = DateTime.UtcNow;
         var profile = device.MockProfile;
         double elapsed = (double)sequence * telemetryMs / 1000d;
         double absolute = profile.PhaseOffsetSeconds + elapsed;
@@ -44,11 +45,12 @@ internal sealed class MockReader : IRobotReader
         bool running = MockTimeline.Running(t), servo = MockTimeline.ServoOn(t), alarming = phase == "ALARM";
         double position = MockTimeline.Position(t);
         string home = !available ? "UNKNOWN" : position < 1e-10 ? "AT_HOME" : "OUTSIDE_HOME";
-        Reading Result(string what) => available ? new(true, 0, "", "SIMULATED " + what)
-            : new(false, -1, "SIMULATED communication loss");
+        Reading Result(string what) => available ? new(true, 0, "", "SIMULATED " + what, sampledAt)
+            : new(false, -1, "SIMULATED communication loss", SampledAtUtc: sampledAt);
         var s = new RobotSample
         {
             Position = Result("pulse"), Torque = Result("torque"), State = Result("state"),
+            CollectionStartedAtUtc = sampledAt,
             Simulation = new(phase, t, cycle, available, home, cycle * 3 + (t >= 45 ? 1 : 0) + (t >= 75 ? 1 : 0) + (t >= 115 ? 1 : 0))
         };
         for (int i = 0; i < 6; i++)
@@ -77,7 +79,7 @@ internal sealed class MockReader : IRobotReader
             {
                 long seconds = checked((long)Math.Round(profile.InitialOperatingHours[i] * 3600) +
                     (long)Math.Floor(MockTimeline.Counter(absolute, i) - MockTimeline.Counter(profile.PhaseOffsetSeconds, i) + 1e-9));
-                var result = available ? new Reading(true, 0, "", $"Elapsed Time: {seconds / 3600} Hours : {seconds / 60 % 60} Minutes : {seconds % 60} Seconds") : Result("operating");
+                var result = available ? new Reading(true, 0, "", $"Elapsed Time: {seconds / 3600} Hours : {seconds / 60 % 60} Minutes : {seconds % 60} Seconds", sampledAt) : Result("operating");
                 s.OperatingReadings.Add(new(CounterNames[i], result, available ? seconds : null));
             }
         }
@@ -96,7 +98,7 @@ internal sealed class MockReader : IRobotReader
         if (extras || jobEverySample)
         {
             s.Job = Result("job");
-            s.JobReadAt = SampleJson.Timestamp();
+            s.JobReadAt = sampledAt.ToString("O", System.Globalization.CultureInfo.InvariantCulture);
             double jobProgress = t < 45 ? Math.Clamp(t - 15, 0, 30) : Math.Clamp(t - 45, 0, 30);
             s.JobData = available ? SampleJson.Map(("name", profile.Jobs[t < 45 ? 0 : 1]),
                 ("line", (int)(jobProgress * 3)), ("step", (int)(jobProgress * 2)),
@@ -110,6 +112,7 @@ internal sealed class MockReader : IRobotReader
             s.SystemInfoData = available ? SampleJson.Map(("simulated", true),
                 ("robot_r1", Info(profile.Model)), ("station_s1", Info("SIM STATION S1")),
                 ("application_a1", Info("SIM APPLICATION A1")), ("controller_model", profile.ControllerModel)) : null;
+            s.SystemReadAtUtc = sampledAt;
             s.Io = device.Io.Length == 0 ? new(false, -1, "No IO addresses configured") : Result("IO byte");
             int flags = (running ? 1 : 0) | (servo ? 2 : 0) | (phase == "HOLD" ? 4 : 0) | (alarming ? 8 : 0) |
                 (home == "AT_HOME" ? 16 : 0) | (phase == "TEACH" ? 32 : 0) | (phase == "HIGH_LOAD" ? 64 : 0);
@@ -117,6 +120,7 @@ internal sealed class MockReader : IRobotReader
                 _ => (object)SampleJson.Map(("read_ok", true), ("status_code", 0),
                     ("sdk_raw_text", Convert.ToString(flags, 2).PadLeft(8, '0')))) : null;
         }
+        s.CollectionCompletedAtUtc = DateTime.UtcNow;
         return s;
     }
 
